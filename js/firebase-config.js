@@ -1,4 +1,3 @@
-// Rename this file to firebase-config.js and paste your Firebase Web App config.
 export const firebaseConfig = {
   apiKey: "AIzaSyBuSkc3-fGy0kHV2_D3eVNNYkFkG2LWnbg",
   authDomain: "maru-manhwa.firebaseapp.com",
