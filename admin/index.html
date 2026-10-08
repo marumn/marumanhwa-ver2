@@ -1,5 +1,990 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin — Maru Manhwa</title><link rel="stylesheet" href="../css/style.css"></head><body><div id="nav"></div><main class="page"><div class="container"><h1>Maru Manhwa Admin</h1><div class="notice">Only give admin access to trusted accounts. This page uses Firebase Storage for image uploads and Firestore for catalog data.</div><div class="adminbox"><h2>1. Add / update manhwa</h2><input id="id" class="field" placeholder="Series ID e.g. solo-leveling"><input id="title" class="field" placeholder="Title"><input id="coverUrl" class="field" placeholder="Cover URL (optional)"><label class="uploadlabel">Or upload cover <input id="coverFile" type="file" accept="image/*"></label><input id="genres" class="field" placeholder="Genres, comma separated"><input id="status" class="field" value="Ongoing" placeholder="Status"><input id="rating" class="field" value="0" placeholder="Rating"><textarea id="description" class="field" placeholder="Description" rows="5"></textarea><button id="save" class="btn">Save Manhwa</button></div><div class="adminbox"><h2>2. Add a new chapter</h2><input id="sid" class="field" placeholder="Series ID"><input id="num" class="field" placeholder="Chapter number"><input id="chapterTitle" class="field" placeholder="Chapter title (optional)"><label class="uploadlabel">Upload chapter pages <input id="pageFiles" type="file" accept="image/*" multiple></label><textarea id="pagesInput" class="field" placeholder="Or paste page URLs, one per line" rows="5"></textarea><button id="chapter" class="btn">Upload & Save Chapter</button><div id="progress" class="muted"></div></div><div class="adminbox"><h2>How it works</h2><ol><li>Create the manhwa once.</li><li>For every new release, enter the same Series ID and new chapter number.</li><li>Select all chapter page images in order, then upload.</li><li>The reader automatically gets the new chapter in its chapter selector.</li></ol></div></div></main><script type="module">import {nav} from '../js/app.js';import {db,storage,FB,auth,firebaseReady} from '../js/firebase.js';nav();
-async function upload(file,path){const r=FB.ref(storage,path);await FB.uploadBytes(r,file,{contentType:file.type});return FB.getDownloadURL(r)}
-save.onclick=async()=>{if(!firebaseReady||!auth?.currentUser)return alert('Configure Firebase and log in.');if(!id.value.trim()||!title.value.trim())return alert('Series ID and title are required.');let cover=coverUrl.value.trim();if(coverFile.files[0])cover=await upload(coverFile.files[0],`covers/${id.value.trim()}/${Date.now()}-${coverFile.files[0].name}`);await FB.setDoc(FB.doc(db,'series',id.value.trim()),{title:title.value.trim(),cover,genres:genres.value.split(',').map(x=>x.trim()).filter(Boolean),description:description.value.trim(),status:status.value||'Ongoing',rating:Number(rating.value)||0,updatedAt:FB.serverTimestamp()},{merge:true});alert('Manhwa saved.');};
-chapter.onclick=async()=>{if(!firebaseReady||!auth?.currentUser)return alert('Configure Firebase and log in.');const seriesId=sid.value.trim(),number=Number(num.value);if(!seriesId||!number)return alert('Series ID and chapter number are required.');let pages=pagesInput.value.split('\n').map(x=>x.trim()).filter(Boolean);const files=[...pageFiles.files];for(let i=0;i<files.length;i++){progress.textContent=`Uploading page ${i+1} of ${files.length}...`;pages.push(await upload(files[i],`chapters/${seriesId}/${number}/${String(i+1).padStart(4,'0')}-${files[i].name}`))}await FB.setDoc(FB.doc(db,'series',seriesId,'chapters',String(number)),{number,title:chapterTitle.value.trim()||`Chapter ${number}`,pages,createdAt:FB.serverTimestamp()},{merge:true});await FB.setDoc(FB.doc(db,'series',seriesId),{chapters:Math.max(number,0),updatedAt:FB.serverTimestamp()},{merge:true});progress.textContent='Done!';alert(`Chapter ${number} saved.`)};
-</script></body></html>
+<!doctype html>
+<html lang="en">
+
+<head>
+
+    <meta charset="utf-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+
+    <title>Admin — Maru Manhwa</title>
+
+    <link
+        rel="stylesheet"
+        href="../css/style.css"
+    >
+
+</head>
+
+
+<body>
+
+    <!-- Navigation -->
+    <div id="nav"></div>
+
+
+    <main class="page">
+
+        <div class="container">
+
+            <h1>
+                Maru Manhwa Admin
+            </h1>
+
+
+            <div class="notice">
+
+                Only give admin access to trusted accounts.
+                This page uses Firebase Storage for image
+                uploads and Firestore for catalog data.
+
+            </div>
+
+
+            <!-- ADMIN STATUS -->
+
+            <div
+                id="adminStatus"
+                class="notice"
+            >
+                Checking admin access...
+            </div>
+
+
+            <!-- ADD MANHWA -->
+
+            <div class="adminbox">
+
+                <h2>
+                    1. Add / Update Manhwa
+                </h2>
+
+
+                <input
+                    id="id"
+                    class="field"
+                    placeholder="Series ID e.g. solo-leveling"
+                >
+
+
+                <input
+                    id="title"
+                    class="field"
+                    placeholder="Title"
+                >
+
+
+                <input
+                    id="coverUrl"
+                    class="field"
+                    placeholder="Cover URL (optional)"
+                >
+
+
+                <label class="uploadlabel">
+
+                    Or upload cover
+
+                    <input
+                        id="coverFile"
+                        type="file"
+                        accept="image/*"
+                    >
+
+                </label>
+
+
+                <input
+                    id="genres"
+                    class="field"
+                    placeholder="Genres, comma separated"
+                >
+
+
+                <input
+                    id="status"
+                    class="field"
+                    value="Ongoing"
+                    placeholder="Status"
+                >
+
+
+                <input
+                    id="rating"
+                    class="field"
+                    value="0"
+                    type="number"
+                    min="0"
+                    max="10"
+                    step="0.1"
+                    placeholder="Rating"
+                >
+
+
+                <textarea
+                    id="description"
+                    class="field"
+                    placeholder="Description"
+                    rows="5"
+                ></textarea>
+
+
+                <button
+                    id="save"
+                    class="btn"
+                    type="button"
+                >
+                    Save Manhwa
+                </button>
+
+
+                <div
+                    id="manhwaProgress"
+                    class="muted"
+                ></div>
+
+            </div>
+
+
+            <!-- ADD CHAPTER -->
+
+            <div class="adminbox">
+
+                <h2>
+                    2. Add a New Chapter
+                </h2>
+
+
+                <input
+                    id="sid"
+                    class="field"
+                    placeholder="Series ID"
+                >
+
+
+                <input
+                    id="num"
+                    class="field"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Chapter number"
+                >
+
+
+                <input
+                    id="chapterTitle"
+                    class="field"
+                    placeholder="Chapter title (optional)"
+                >
+
+
+                <label class="uploadlabel">
+
+                    Upload chapter pages
+
+                    <input
+                        id="pageFiles"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                    >
+
+                </label>
+
+
+                <textarea
+                    id="pagesInput"
+                    class="field"
+                    placeholder="Or paste page URLs, one per line"
+                    rows="5"
+                ></textarea>
+
+
+                <button
+                    id="chapter"
+                    class="btn"
+                    type="button"
+                >
+                    Upload & Save Chapter
+                </button>
+
+
+                <div
+                    id="progress"
+                    class="muted"
+                ></div>
+
+            </div>
+
+
+            <!-- INSTRUCTIONS -->
+
+            <div class="adminbox">
+
+                <h2>
+                    How it works
+                </h2>
+
+
+                <ol>
+
+                    <li>
+                        Create the manhwa once.
+                    </li>
+
+                    <li>
+                        Use the same Series ID for
+                        every chapter.
+                    </li>
+
+                    <li>
+                        Enter a new chapter number.
+                    </li>
+
+                    <li>
+                        Select all chapter page images
+                        in order.
+                    </li>
+
+                    <li>
+                        Upload the chapter.
+                    </li>
+
+                </ol>
+
+            </div>
+
+        </div>
+
+    </main>
+
+
+    <script type="module">
+
+        import {
+            nav
+        } from '../js/app.js';
+
+
+        import {
+            db,
+            storage,
+            FB,
+            auth,
+            firebaseReady
+        } from '../js/firebase.js';
+
+
+        /*
+         * Navigation
+         */
+
+        nav();
+
+
+        /*
+         * Elements
+         */
+
+        const adminStatus =
+            document.getElementById(
+                'adminStatus'
+            );
+
+
+        const manhwaProgress =
+            document.getElementById(
+                'manhwaProgress'
+            );
+
+
+        const progress =
+            document.getElementById(
+                'progress'
+            );
+
+
+        /*
+         * Check Firebase
+         */
+
+        if (!firebaseReady) {
+
+            adminStatus.textContent =
+                'Firebase is not configured.';
+
+            throw new Error(
+                'Firebase is not configured.'
+            );
+
+        }
+
+
+        /*
+         * Check login + admin role
+         */
+
+        FB.onAuthStateChanged(
+            auth,
+            async user => {
+
+                if (!user) {
+
+                    adminStatus.textContent =
+                        'You are not logged in.';
+
+                    return;
+
+                }
+
+
+                try {
+
+                    const userRef =
+                        FB.doc(
+                            db,
+                            'users',
+                            user.uid
+                        );
+
+
+                    const userSnapshot =
+                        await FB.getDoc(
+                            userRef
+                        );
+
+
+                    if (!userSnapshot.exists()) {
+
+                        adminStatus.textContent =
+                            'Your users document does not exist.';
+
+                        return;
+
+                    }
+
+
+                    const userData =
+                        userSnapshot.data();
+
+
+                    if (
+                        userData.role !== 'admin'
+                    ) {
+
+                        adminStatus.textContent =
+                            'Your account is not an admin. Set role = admin in Firestore.';
+
+                        return;
+
+                    }
+
+
+                    adminStatus.textContent =
+                        '✓ Admin access confirmed.';
+
+
+                } catch (error) {
+
+                    console.error(
+                        error
+                    );
+
+
+                    adminStatus.textContent =
+                        'Admin check failed: ' +
+                        error.message;
+
+                }
+
+            }
+        );
+
+
+        /*
+         * Upload helper
+         */
+
+        async function upload(
+            file,
+            path
+        ) {
+
+            if (!storage) {
+
+                throw new Error(
+                    'Firebase Storage is not initialized.'
+                );
+
+            }
+
+
+            const storageReference =
+                FB.ref(
+                    storage,
+                    path
+                );
+
+
+            const snapshot =
+                await FB.uploadBytes(
+                    storageReference,
+                    file,
+                    {
+                        contentType:
+                            file.type
+                    }
+                );
+
+
+            return await FB.getDownloadURL(
+                snapshot.ref
+            );
+
+        }
+
+
+        /*
+         * SAVE MANHWA
+         */
+
+        document
+            .getElementById('save')
+            .addEventListener(
+                'click',
+                async () => {
+
+                    try {
+
+                        if (
+                            !auth ||
+                            !auth.currentUser
+                        ) {
+
+                            alert(
+                                'You are not logged in.'
+                            );
+
+                            return;
+
+                        }
+
+
+                        const seriesId =
+                            document
+                                .getElementById('id')
+                                .value
+                                .trim();
+
+
+                        const title =
+                            document
+                                .getElementById('title')
+                                .value
+                                .trim();
+
+
+                        const coverUrl =
+                            document
+                                .getElementById('coverUrl')
+                                .value
+                                .trim();
+
+
+                        const coverFile =
+                            document
+                                .getElementById('coverFile')
+                                .files[0];
+
+
+                        const genres =
+                            document
+                                .getElementById('genres')
+                                .value
+                                .split(',')
+                                .map(
+                                    value =>
+                                        value.trim()
+                                )
+                                .filter(Boolean);
+
+
+                        const status =
+                            document
+                                .getElementById('status')
+                                .value
+                                .trim() ||
+                            'Ongoing';
+
+
+                        const rating =
+                            Number(
+                                document
+                                    .getElementById('rating')
+                                    .value
+                            ) || 0;
+
+
+                        const description =
+                            document
+                                .getElementById('description')
+                                .value
+                                .trim();
+
+
+                        if (!seriesId) {
+
+                            alert(
+                                'Enter a Series ID.'
+                            );
+
+                            return;
+
+                        }
+
+
+                        if (!title) {
+
+                            alert(
+                                'Enter a title.'
+                            );
+
+                            return;
+
+                        }
+
+
+                        manhwaProgress.textContent =
+                            'Saving manhwa...';
+
+
+                        /*
+                         * Cover upload
+                         */
+
+                        let cover =
+                            coverUrl;
+
+
+                        if (coverFile) {
+
+                            manhwaProgress.textContent =
+                                'Uploading cover...';
+
+
+                            cover =
+                                await upload(
+                                    coverFile,
+                                    `covers/${seriesId}/${Date.now()}-${coverFile.name}`
+                                );
+
+                        }
+
+
+                        /*
+                         * Save Firestore document
+                         */
+
+                        manhwaProgress.textContent =
+                            'Saving to Firestore...';
+
+
+                        await FB.setDoc(
+
+                            FB.doc(
+                                db,
+                                'series',
+                                seriesId
+                            ),
+
+                            {
+
+                                title,
+
+                                cover,
+
+                                genres,
+
+                                description,
+
+                                status,
+
+                                rating,
+
+                                updatedAt:
+                                    FB.serverTimestamp()
+
+                            },
+
+                            {
+                                merge: true
+                            }
+
+                        );
+
+
+                        manhwaProgress.textContent =
+                            '✓ Manhwa saved successfully.';
+
+
+                        alert(
+                            'Manhwa saved successfully!'
+                        );
+
+
+                    } catch (error) {
+
+                        console.error(
+                            'MANHWA ERROR:',
+                            error
+                        );
+
+
+                        manhwaProgress.textContent =
+                            'ERROR: ' +
+                            error.message;
+
+
+                        alert(
+                            'Could not save manhwa:\n\n' +
+                            error.message
+                        );
+
+                    }
+
+                }
+            );
+
+
+        /*
+         * SAVE CHAPTER
+         */
+
+        document
+            .getElementById('chapter')
+            .addEventListener(
+                'click',
+                async () => {
+
+                    try {
+
+                        if (
+                            !auth ||
+                            !auth.currentUser
+                        ) {
+
+                            alert(
+                                'You are not logged in.'
+                            );
+
+                            return;
+
+                        }
+
+
+                        const seriesId =
+                            document
+                                .getElementById('sid')
+                                .value
+                                .trim();
+
+
+                        const number =
+                            Number(
+                                document
+                                    .getElementById('num')
+                                    .value
+                            );
+
+
+                        const chapterTitle =
+                            document
+                                .getElementById('chapterTitle')
+                                .value
+                                .trim();
+
+
+                        const pageFiles =
+                            [
+                                ...
+                                document
+                                    .getElementById(
+                                        'pageFiles'
+                                    )
+                                    .files
+                            ];
+
+
+                        const pagesInput =
+                            document
+                                .getElementById(
+                                    'pagesInput'
+                                )
+                                .value;
+
+
+                        if (!seriesId) {
+
+                            alert(
+                                'Enter the Series ID.'
+                            );
+
+                            return;
+
+                        }
+
+
+                        if (
+                            Number.isNaN(number)
+                        ) {
+
+                            alert(
+                                'Enter a chapter number.'
+                            );
+
+                            return;
+
+                        }
+
+
+                        if (
+                            pageFiles.length === 0 &&
+                            !pagesInput.trim()
+                        ) {
+
+                            alert(
+                                'Select chapter page images or paste page URLs.'
+                            );
+
+                            return;
+
+                        }
+
+
+                        /*
+                         * Make sure the series exists
+                         */
+
+                        const seriesRef =
+                            FB.doc(
+                                db,
+                                'series',
+                                seriesId
+                            );
+
+
+                        const seriesSnapshot =
+                            await FB.getDoc(
+                                seriesRef
+                            );
+
+
+                        if (
+                            !seriesSnapshot.exists()
+                        ) {
+
+                            alert(
+                                `Series "${seriesId}" does not exist.\n\nCreate the manhwa first.`
+                            );
+
+                            return;
+
+                        }
+
+
+                        /*
+                         * Start with pasted URLs
+                         */
+
+                        const pages =
+                            pagesInput
+                                .split('\n')
+                                .map(
+                                    value =>
+                                        value.trim()
+                                )
+                                .filter(Boolean);
+
+
+                        /*
+                         * Upload images
+                         */
+
+                        for (
+                            let i = 0;
+                            i < pageFiles.length;
+                            i++
+                        ) {
+
+                            const file =
+                                pageFiles[i];
+
+
+                            progress.textContent =
+                                `Uploading page ${i + 1} of ${pageFiles.length}...`;
+
+
+                            const safeName =
+                                file.name
+                                    .replace(
+                                        /[^a-zA-Z0-9._-]/g,
+                                        '_'
+                                    );
+
+
+                            const url =
+                                await upload(
+
+                                    file,
+
+                                    `chapters/${seriesId}/${number}/${String(i + 1).padStart(4, '0')}-${safeName}`
+
+                                );
+
+
+                            pages.push(url);
+
+                        }
+
+
+                        /*
+                         * Check pages
+                         */
+
+                        if (
+                            pages.length === 0
+                        ) {
+
+                            throw new Error(
+                                'No chapter pages were uploaded.'
+                            );
+
+                        }
+
+
+                        /*
+                         * Save chapter
+                         */
+
+                        progress.textContent =
+                            'Saving chapter to Firestore...';
+
+
+                        await FB.setDoc(
+
+                            FB.doc(
+                                db,
+                                'series',
+                                seriesId,
+                                'chapters',
+                                String(number)
+                            ),
+
+                            {
+
+                                number,
+
+                                title:
+                                    chapterTitle ||
+                                    `Chapter ${number}`,
+
+                                pages,
+
+                                createdAt:
+                                    FB.serverTimestamp(),
+
+                                updatedAt:
+                                    FB.serverTimestamp()
+
+                            },
+
+                            {
+                                merge: true
+                            }
+
+                        );
+
+
+                        /*
+                         * Update chapter count
+                         */
+
+                        const currentSeries =
+                            seriesSnapshot.data();
+
+
+                        const currentCount =
+                            Number(
+                                currentSeries.chapters
+                            ) || 0;
+
+
+                        await FB.setDoc(
+
+                            seriesRef,
+
+                            {
+
+                                chapters:
+                                    Math.max(
+                                        currentCount,
+                                        number
+                                    ),
+
+                                updatedAt:
+                                    FB.serverTimestamp()
+
+                            },
+
+                            {
+                                merge: true
+                            }
+
+                        );
+
+
+                        /*
+                         * Finished
+                         */
+
+                        progress.textContent =
+                            `✓ Chapter ${number} saved successfully.`;
+
+
+                        alert(
+                            `Chapter ${number} saved successfully!`
+                        );
+
+
+                    } catch (error) {
+
+                        console.error(
+                            'CHAPTER ERROR:',
+                            error
+                        );
+
+
+                        progress.textContent =
+                            'ERROR: ' +
+                            error.message;
+
+
+                        alert(
+                            'Could not save chapter:\n\n' +
+                            error.message
+                        );
+
+                    }
+
+                }
+            );
+
+    </script>
+
+</body>
+
+</html>
