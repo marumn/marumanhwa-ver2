@@ -415,393 +415,425 @@
         await renderSocial();
 
 
-        async function renderSocial() {
+       async function renderSocial() {
 
-            if (!firebaseReady) {
+    if (!firebaseReady) {
+        commentHintEl.textContent =
+            'Connect Firebase to enable reactions and comments.';
+        return;
+    }
 
-                commentHintEl.textContent =
-                    'Connect Firebase to enable reactions and comments.';
-
-                return;
-
-            }
-
-
-            /* ------------------------------
-               REACTIONS
-            ------------------------------ */
-
-            const types = [
-                ['like', '👍'],
-                ['love', '❤️'],
-                ['fire', '🔥'],
-                ['funny', '😂']
-            ];
+    const loggedIn = !!auth?.currentUser;
 
 
-            const reactionSnapshot =
-                await FB.getDocs(
+    /* --------------------------------
+       LOGGED OUT MESSAGE
+    -------------------------------- */
+
+    if (!loggedIn) {
+
+        commentHintEl.innerHTML = `
+            <a href="auth/login.html">
+                Log in
+            </a>
+            to react or comment.
+        `;
+
+    } else {
+
+        commentHintEl.textContent =
+            'You are logged in.';
+
+    }
+
+
+    /* --------------------------------
+       REACTIONS
+    -------------------------------- */
+
+    const types = [
+        ['like', '👍'],
+        ['love', '❤️'],
+        ['fire', '🔥'],
+        ['funny', '😂']
+    ];
+
+    const reactionSnapshot =
+        await FB.getDocs(
+            FB.collection(
+                db,
+                'series',
+                sid,
+                'chapters',
+                String(currentChapter.id),
+                'reactions'
+            )
+        );
+
+
+    const counts =
+        Object.fromEntries(
+            types.map(type => [
+                type[0],
+                0
+            ])
+        );
+
+
+    let myReaction = null;
+
+
+    reactionSnapshot.forEach(doc => {
+
+        const data = doc.data();
+
+
+        if (counts[data.type] !== undefined) {
+            counts[data.type]++;
+        }
+
+
+        if (
+            loggedIn &&
+            auth.currentUser.uid === doc.id
+        ) {
+            myReaction = data.type;
+        }
+
+    });
+
+
+    reactionsEl.innerHTML =
+        types
+            .map(([type, emoji]) => {
+
+                return `
+                    <button
+                        class="reaction ${myReaction === type ? 'active' : ''}"
+                        data-type="${type}"
+                    >
+                        ${emoji}
+                        <span>
+                            ${counts[type]}
+                        </span>
+                    </button>
+                `;
+
+            })
+            .join('');
+
+
+    /* --------------------------------
+       REACTION CLICK
+    -------------------------------- */
+
+    document
+        .querySelectorAll('.reaction')
+        .forEach(button => {
+
+            button.onclick = async () => {
+
+                if (!auth?.currentUser) {
+
+                    window.location.href =
+                        'auth/login.html';
+
+                    return;
+                }
+
+
+                const reactionRef =
+                    FB.doc(
+                        db,
+                        'series',
+                        sid,
+                        'chapters',
+                        String(currentChapter.id),
+                        'reactions',
+                        auth.currentUser.uid
+                    );
+
+
+                const existing =
+                    await FB.getDoc(
+                        reactionRef
+                    );
+
+
+                if (
+                    existing.exists() &&
+                    existing.data().type ===
+                    button.dataset.type
+                ) {
+
+                    await FB.deleteDoc(
+                        reactionRef
+                    );
+
+                } else {
+
+                    await FB.setDoc(
+                        reactionRef,
+                        {
+                            uid: auth.currentUser.uid,
+                            type: button.dataset.type,
+                            updatedAt:
+                                FB.serverTimestamp()
+                        }
+                    );
+
+                }
+
+
+                await renderSocial();
+
+            };
+
+        });
+
+
+    /* --------------------------------
+       COMMENT BOX
+    -------------------------------- */
+
+    if (loggedIn) {
+
+        commentFormEl.innerHTML = `
+            <div class="commentcomposer">
+
+                <textarea
+                    id="commentText"
+                    class="field"
+                    maxlength="2000"
+                    rows="3"
+                    placeholder="Write a comment..."
+                ></textarea>
+
+                <button
+                    id="postComment"
+                    class="btn"
+                >
+                    Post comment
+                </button>
+
+            </div>
+        `;
+
+
+        const commentText =
+            document.getElementById(
+                'commentText'
+            );
+
+
+        const postComment =
+            document.getElementById(
+                'postComment'
+            );
+
+
+        postComment.onclick =
+            async () => {
+
+                const text =
+                    commentText.value.trim();
+
+
+                if (!text) {
+                    return;
+                }
+
+
+                await FB.addDoc(
                     FB.collection(
                         db,
                         'series',
                         sid,
                         'chapters',
                         String(currentChapter.id),
-                        'reactions'
-                    )
+                        'comments'
+                    ),
+                    {
+                        uid: auth.currentUser.uid,
+
+                        username:
+                            auth.currentUser.displayName ||
+                            'Reader',
+
+                        text,
+
+                        createdAt:
+                            FB.serverTimestamp()
+                    }
                 );
 
 
-            const counts =
-                Object.fromEntries(
-                    types.map(type => [
-                        type[0],
-                        0
-                    ])
-                );
+                commentText.value = '';
+
+                await renderSocial();
+
+            };
+
+    } else {
+
+        commentFormEl.innerHTML = `
+            <div class="notice login-required">
+
+                🔒
+                <strong>Want to join the discussion?</strong>
+
+                <br>
+
+                <span class="muted">
+                    You need to log in before you can
+                    react or comment.
+                </span>
+
+                <br><br>
+
+                <a
+                    href="auth/login.html"
+                    class="btn"
+                >
+                    Log In
+                </a>
+
+            </div>
+        `;
+
+    }
 
 
-            let myReaction = null;
+    /* --------------------------------
+       LOAD COMMENTS
+    -------------------------------- */
+
+    const commentsSnapshot =
+        await FB.getDocs(
+            FB.query(
+                FB.collection(
+                    db,
+                    'series',
+                    sid,
+                    'chapters',
+                    String(currentChapter.id),
+                    'comments'
+                ),
+                FB.orderBy(
+                    'createdAt',
+                    'desc'
+                ),
+                FB.limit(100)
+            )
+        );
 
 
-            reactionSnapshot.forEach(doc => {
+    if (commentsSnapshot.empty) {
 
-                const data = doc.data();
+        commentListEl.innerHTML = `
+            <div class="empty">
+                No comments yet.
+                Be the first.
+            </div>
+        `;
 
+    } else {
 
-                if (counts[data.type] !== undefined) {
+        commentListEl.innerHTML =
+            commentsSnapshot.docs
+                .map(doc => {
 
-                    counts[data.type]++;
-
-                }
-
-
-                if (
-                    auth?.currentUser?.uid ===
-                    doc.id
-                ) {
-
-                    myReaction = data.type;
-
-                }
-
-            });
+                    const data =
+                        doc.data();
 
 
-            reactionsEl.innerHTML =
-                types
-                    .map(([type, emoji]) => {
+                    const date =
+                        data.createdAt?.toDate
+                            ? data.createdAt
+                                .toDate()
+                                .toLocaleString()
+                            : '';
 
-                        return `
-                            <button
-                                class="reaction ${myReaction === type ? 'active' : ''}"
-                                data-type="${type}"
-                            >
-                                ${emoji}
-                                <span>
-                                    ${counts[type]}
+
+                    const deleteButton =
+                        loggedIn &&
+                        auth.currentUser.uid ===
+                        data.uid
+                            ? `
+                                <button
+                                    class="linkbtn"
+                                    data-delete="${esc(doc.id)}"
+                                >
+                                    Delete
+                                </button>
+                            `
+                            : '';
+
+
+                    return `
+                        <article class="comment">
+
+                            <div class="commenthead">
+
+                                <strong>
+                                    ${esc(
+                                        data.username ||
+                                        'Reader'
+                                    )}
+                                </strong>
+
+                                <span class="muted">
+                                    ${esc(date)}
                                 </span>
-                            </button>
-                        `;
 
-                    })
-                    .join('');
+                            </div>
 
+                            <div>
+                                ${esc(data.text)}
+                            </div>
 
-            document
-                .querySelectorAll('.reaction')
-                .forEach(button => {
+                            ${deleteButton}
 
-                    button.onclick = async () => {
+                        </article>
+                    `;
 
-                        if (!auth?.currentUser) {
+                })
+                .join('');
 
-                            window.location.href =
-                                'auth/login.html';
-
-                            return;
-
-                        }
+    }
 
 
-                        const reactionRef =
-                            FB.doc(
-                                db,
-                                'series',
-                                sid,
-                                'chapters',
-                                String(currentChapter.id),
-                                'reactions',
-                                auth.currentUser.uid
-                            );
+    /* --------------------------------
+       DELETE COMMENTS
+    -------------------------------- */
 
+    document
+        .querySelectorAll('[data-delete]')
+        .forEach(button => {
 
-                        const existing =
-                            await FB.getDoc(
-                                reactionRef
-                            );
+            button.onclick =
+                async () => {
 
-
-                        if (
-                            existing.exists() &&
-                            existing.data().type ===
-                            button.dataset.type
-                        ) {
-
-                            await FB.deleteDoc(
-                                reactionRef
-                            );
-
-                        } else {
-
-                            await FB.setDoc(
-                                reactionRef,
-                                {
-                                    uid: auth.currentUser.uid,
-                                    type: button.dataset.type,
-                                    updatedAt: FB.serverTimestamp()
-                                }
-                            );
-
-                        }
-
-
-                        await renderSocial();
-
-                    };
-
-                });
-
-
-            /* ------------------------------
-               COMMENT FORM
-            ------------------------------ */
-
-            if (auth?.currentUser) {
-
-                commentFormEl.innerHTML = `
-                    <div class="commentcomposer">
-
-                        <textarea
-                            id="commentText"
-                            class="field"
-                            maxlength="2000"
-                            rows="3"
-                            placeholder="Write a comment..."
-                        ></textarea>
-
-                        <button
-                            id="postComment"
-                            class="btn"
-                        >
-                            Post comment
-                        </button>
-
-                    </div>
-                `;
-
-
-                const commentText =
-                    document.getElementById(
-                        'commentText'
-                    );
-
-
-                const postComment =
-                    document.getElementById(
-                        'postComment'
-                    );
-
-
-                postComment.onclick =
-                    async () => {
-
-                        const text =
-                            commentText.value.trim();
-
-
-                        if (!text) {
-
-                            return;
-
-                        }
-
-
-                        await FB.addDoc(
-                            FB.collection(
-                                db,
-                                'series',
-                                sid,
-                                'chapters',
-                                String(currentChapter.id),
-                                'comments'
-                            ),
-                            {
-                                uid: auth.currentUser.uid,
-
-                                username:
-                                    auth.currentUser.displayName ||
-                                    'Reader',
-
-                                text,
-
-                                createdAt:
-                                    FB.serverTimestamp()
-                            }
-                        );
-
-
-                        commentText.value = '';
-
-                        await renderSocial();
-
-                    };
-
-            } else {
-
-                commentFormEl.innerHTML = `
-                    <div class="notice">
-                        Please
-                        <a href="auth/login.html">
-                            <u>log in</u>
-                        </a>
-                        to comment.
-                    </div>
-                `;
-
-            }
-
-
-            /* ------------------------------
-               LOAD COMMENTS
-            ------------------------------ */
-
-            const commentsSnapshot =
-                await FB.getDocs(
-                    FB.query(
-                        FB.collection(
+                    await FB.deleteDoc(
+                        FB.doc(
                             db,
                             'series',
                             sid,
                             'chapters',
                             String(currentChapter.id),
-                            'comments'
-                        ),
-                        FB.orderBy(
-                            'createdAt',
-                            'desc'
-                        ),
-                        FB.limit(100)
-                    )
-                );
+                            'comments',
+                            button.dataset.delete
+                        )
+                    );
 
 
-            if (commentsSnapshot.empty) {
+                    await renderSocial();
 
-                commentListEl.innerHTML = `
-                    <div class="empty">
-                        No comments yet.
-                        Be the first.
-                    </div>
-                `;
+                };
 
-            } else {
+        });
 
-                commentListEl.innerHTML =
-                    commentsSnapshot.docs
-                        .map(doc => {
-
-                            const data =
-                                doc.data();
-
-
-                            const date =
-                                data.createdAt?.toDate
-                                    ? data.createdAt
-                                        .toDate()
-                                        .toLocaleString()
-                                    : '';
-
-
-                            const deleteButton =
-                                auth?.currentUser?.uid ===
-                                data.uid
-                                    ? `
-                                        <button
-                                            class="linkbtn"
-                                            data-delete="${esc(doc.id)}"
-                                        >
-                                            Delete
-                                        </button>
-                                    `
-                                    : '';
-
-
-                            return `
-                                <article class="comment">
-
-                                    <div class="commenthead">
-
-                                        <strong>
-                                            ${esc(
-                                                data.username ||
-                                                'Reader'
-                                            )}
-                                        </strong>
-
-                                        <span class="muted">
-                                            ${esc(date)}
-                                        </span>
-
-                                    </div>
-
-                                    <div>
-                                        ${esc(data.text)}
-                                    </div>
-
-                                    ${deleteButton}
-
-                                </article>
-                            `;
-
-                        })
-                        .join('');
-
-            }
-
-
-            /* ------------------------------
-               DELETE COMMENTS
-            ------------------------------ */
-
-            document
-                .querySelectorAll('[data-delete]')
-                .forEach(button => {
-
-                    button.onclick =
-                        async () => {
-
-                            await FB.deleteDoc(
-                                FB.doc(
-                                    db,
-                                    'series',
-                                    sid,
-                                    'chapters',
-                                    String(currentChapter.id),
-                                    'comments',
-                                    button.dataset.delete
-                                )
-                            );
-
-
-                            await renderSocial();
-
-                        };
-
-                });
-
-        }
-
+}
     </script>
 
 </body>
