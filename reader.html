@@ -1,10 +1,808 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reader — Maru Manhwa</title><link rel="stylesheet" href="css/style.css"></head><body class="reader"><div class="readerbar"><div class="readerin"><a class="btn secondary" id="back">←</a><div class="grow" id="name">Reader</div><select id="chapters" class="field" style="width:auto;margin:0"></select><button class="btn secondary" id="top">↑</button></div></div><main class="pages" id="pages"></main><section class="reader-social container"><div class="reactionbox"><h2>React to this chapter</h2><div id="reactions" class="reactions"></div></div><div class="comments"><div class="sectionhead"><h2>Comments</h2><span id="commentHint" class="muted"></span></div><div id="commentForm"></div><div id="commentList" class="commentlist"></div></div></section><div id="footer"></div><script type="module">
-import {getSeries,saveHistory,esc,footer} from './js/app.js';import {db,FB,auth,firebaseReady} from './js/firebase.js';import {demoPages} from './js/data.js';
-const sp=new URLSearchParams(location.search),sid=sp.get('series')||'solo-leveling',cid=sp.get('chapter')||'1';const s=await getSeries(sid);let chapters=[];
-if(firebaseReady){const r=await FB.getDocs(FB.query(FB.collection(db,'series',sid,'chapters'),FB.orderBy('number','asc')));chapters=r.docs.map(d=>({id:d.id,...d.data()}))}
-if(!chapters.length)chapters=Array.from({length:Math.min(s?.chapters||12,30)},(_,i)=>({id:String(i+1),number:i+1,pages:demoPages}));
-const c=chapters.find(x=>String(x.id)===String(cid))||chapters[0];name.textContent=`${s.title} — Chapter ${c.number}`;back.onclick=()=>location.href=`series.html?id=${encodeURIComponent(sid)}`;chaptersEl();top.onclick=()=>scrollTo({top:0,behavior:'smooth'});pages.innerHTML=(c.pages||demoPages).map((p,i)=>`<img src="${esc(p)}" loading="${i<2?'eager':'lazy'}" alt="Page ${i+1}">`).join('');await saveHistory(s,c.number);footerEl();renderSocial();
-function chaptersEl(){document.querySelector('#chapters').innerHTML=chapters.map(x=>`<option value="${esc(x.id)}" ${String(x.id)===String(c.id)?'selected':''}>Chapter ${x.number}</option>`).join('');document.querySelector('#chapters').onchange=e=>location.href=`reader.html?series=${encodeURIComponent(sid)}&chapter=${encodeURIComponent(e.target.value)}`}
-function footerEl(){document.querySelector('#footer').innerHTML=footer()}
-async function renderSocial(){if(!firebaseReady){commentHint.textContent='Connect Firebase to enable reactions and comments.';return}const types=[['like','👍'],['love','❤️'],['fire','🔥'],['funny','😂']];const rr=await FB.getDocs(FB.collection(db,'series',sid,'chapters',String(c.id),'reactions'));const counts=Object.fromEntries(types.map(x=>[x[0],0]));let mine=null;rr.forEach(d=>{const x=d.data();if(counts[x.type]!=null)counts[x.type]++;if(auth?.currentUser?.uid===d.id)mine=x.type});reactions.innerHTML=types.map(([type,emoji])=>`<button class="reaction ${mine===type?'active':''}" data-type="${type}">${emoji} <span>${counts[type]}</span></button>`).join('');document.querySelectorAll('.reaction').forEach(b=>b.onclick=async()=>{if(!auth?.currentUser)return location.href='auth/login.html';const ref=FB.doc(db,'series',sid,'chapters',String(c.id),'reactions',auth.currentUser.uid);const snap=await FB.getDoc(ref);if(snap.exists()&&snap.data().type===b.dataset.type)await FB.deleteDoc(ref);else await FB.setDoc(ref,{type:b.dataset.type,uid:auth.currentUser.uid,updatedAt:FB.serverTimestamp()});renderSocial()});commentForm.innerHTML=auth?.currentUser?`<div class="commentcomposer"><textarea id="commentText" class="field" maxlength="2000" rows="3" placeholder="Write a comment..."></textarea><button id="postComment" class="btn">Post comment</button></div>`:`<div class="notice">Please <a href="auth/login.html"><u>log in</u></a> to comment.</div>`;if(auth?.currentUser)postComment.onclick=async()=>{const text=commentText.value.trim();if(!text)return;await FB.addDoc(FB.collection(db,'series',sid,'chapters',String(c.id),'comments'),{uid:auth.currentUser.uid,username:auth.currentUser.displayName||'Reader',text,createdAt:FB.serverTimestamp()});commentText.value='';renderSocial()};const cr=await FB.getDocs(FB.query(FB.collection(db,'series',sid,'chapters',String(c.id),'comments'),FB.orderBy('createdAt','desc'),FB.limit(100)));commentList.innerHTML=cr.empty?'<div class="empty">No comments yet. Be the first.</div>':cr.docs.map(d=>{const x=d.data();return `<article class="comment"><div class="commenthead"><strong>${esc(x.username||'Reader')}</strong><span class="muted">${x.createdAt?.toDate?x.createdAt.toDate().toLocaleString():''}</span></div><div>${esc(x.text)}</div>${auth?.currentUser?.uid===x.uid?`<button class="linkbtn" data-delete="${d.id}">Delete</button>`:''}</article>`}).join('');document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{await FB.deleteDoc(FB.doc(db,'series',sid,'chapters',String(c.id),'comments',b.dataset.delete));renderSocial()})}
-</script></body></html>
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reader — Maru Manhwa</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body class="reader">
+
+    <div class="readerbar">
+        <div class="readerin">
+
+            <a class="btn secondary" id="back">←</a>
+
+            <div class="grow" id="name">
+                Reader
+            </div>
+
+            <select id="chapters" class="field" style="width:auto;margin:0"></select>
+
+            <button class="btn secondary" id="top">
+                ↑
+            </button>
+
+        </div>
+    </div>
+
+
+    <!-- CHAPTER PAGES -->
+    <main class="pages" id="pages"></main>
+
+
+    <!-- REACTIONS + COMMENTS -->
+    <section class="reader-social container">
+
+        <div class="reactionbox">
+            <h2>React to this chapter</h2>
+            <div id="reactions" class="reactions"></div>
+        </div>
+
+        <div class="comments">
+
+            <div class="sectionhead">
+                <h2>Comments</h2>
+                <span id="commentHint" class="muted"></span>
+            </div>
+
+            <div id="commentForm"></div>
+
+            <div id="commentList" class="commentlist"></div>
+
+        </div>
+
+    </section>
+
+
+    <div id="footer"></div>
+
+
+    <script type="module">
+
+        import {
+            getSeries,
+            saveHistory,
+            esc,
+            footer
+        } from './js/app.js';
+
+        import {
+            db,
+            FB,
+            auth,
+            firebaseReady
+        } from './js/firebase.js';
+
+
+        /* --------------------------------
+           ELEMENTS
+        -------------------------------- */
+
+        const pagesEl = document.getElementById('pages');
+        const nameEl = document.getElementById('name');
+        const chaptersEl = document.getElementById('chapters');
+        const backEl = document.getElementById('back');
+        const topEl = document.getElementById('top');
+
+        const reactionsEl = document.getElementById('reactions');
+        const commentHintEl = document.getElementById('commentHint');
+        const commentFormEl = document.getElementById('commentForm');
+        const commentListEl = document.getElementById('commentList');
+
+        const footerEl = document.getElementById('footer');
+
+
+        /* --------------------------------
+           URL
+        -------------------------------- */
+
+        const params = new URLSearchParams(location.search);
+
+        const sid = params.get('series') || 'solo-leveling';
+
+        const chapterId =
+            params.get('chapter') || '1';
+
+
+        /* --------------------------------
+           GET SERIES
+        -------------------------------- */
+
+        const series = await getSeries(sid);
+
+        if (!series) {
+
+            pagesEl.innerHTML = `
+                <div class="empty">
+                    Manhwa not found.
+                </div>
+            `;
+
+            throw new Error('Series not found');
+
+        }
+
+
+        /* --------------------------------
+           GET CHAPTERS
+        -------------------------------- */
+
+        let chapters = [];
+
+
+        if (firebaseReady) {
+
+            try {
+
+                const snapshot = await FB.getDocs(
+                    FB.query(
+                        FB.collection(
+                            db,
+                            'series',
+                            sid,
+                            'chapters'
+                        ),
+                        FB.orderBy('number', 'asc')
+                    )
+                );
+
+
+                chapters = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+
+
+            } catch (error) {
+
+                console.error(
+                    'Could not load chapters:',
+                    error
+                );
+
+            }
+
+        }
+
+
+        /* --------------------------------
+           DEMO FALLBACK
+        -------------------------------- */
+
+        if (!chapters.length) {
+
+            chapters = Array.from(
+                {
+                    length: Math.min(
+                        Number(series.chapters) || 1,
+                        30
+                    )
+                },
+                (_, index) => ({
+
+                    id: String(index + 1),
+
+                    number: index + 1,
+
+                    title: `Chapter ${index + 1}`,
+
+                    pages: []
+
+                })
+            );
+
+        }
+
+
+        /* --------------------------------
+           CURRENT CHAPTER
+        -------------------------------- */
+
+        let currentChapter =
+            chapters.find(
+                chapter =>
+                    String(chapter.id) ===
+                    String(chapterId)
+            );
+
+
+        if (!currentChapter) {
+
+            currentChapter = chapters[0];
+
+        }
+
+
+        /* --------------------------------
+           HEADER
+        -------------------------------- */
+
+        nameEl.textContent =
+            `${series.title} — Chapter ${currentChapter.number}`;
+
+
+        backEl.href =
+            `series.html?id=${encodeURIComponent(sid)}`;
+
+
+        topEl.onclick = () => {
+
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+
+        };
+
+
+        /* --------------------------------
+           CHAPTER SELECTOR
+        -------------------------------- */
+
+        chaptersEl.innerHTML =
+            chapters
+                .map(chapter => {
+
+                    const selected =
+                        String(chapter.id) ===
+                        String(currentChapter.id)
+                            ? 'selected'
+                            : '';
+
+                    return `
+                        <option
+                            value="${esc(chapter.id)}"
+                            ${selected}
+                        >
+                            Chapter ${esc(chapter.number)}
+                        </option>
+                    `;
+
+                })
+                .join('');
+
+
+        chaptersEl.onchange = event => {
+
+            const newChapter =
+                event.target.value;
+
+            window.location.href =
+                `reader.html?series=${encodeURIComponent(sid)}&chapter=${encodeURIComponent(newChapter)}`;
+
+        };
+
+
+        /* --------------------------------
+           GET PAGE URLS
+        -------------------------------- */
+
+        let pageUrls = [];
+
+
+        if (Array.isArray(currentChapter.pages)) {
+
+            pageUrls = currentChapter.pages;
+
+        }
+
+
+        /*
+           Also support alternative field names
+           in case an older chapter was saved
+           using one of these.
+        */
+
+        if (!pageUrls.length && Array.isArray(currentChapter.pageUrls)) {
+
+            pageUrls = currentChapter.pageUrls;
+
+        }
+
+
+        if (!pageUrls.length && Array.isArray(currentChapter.images)) {
+
+            pageUrls = currentChapter.images;
+
+        }
+
+
+        /* --------------------------------
+           CLEAN PAGE URLS
+        -------------------------------- */
+
+        pageUrls = pageUrls
+            .map(page => {
+
+                if (typeof page === 'string') {
+
+                    return page.trim();
+
+                }
+
+                if (page && typeof page.url === 'string') {
+
+                    return page.url.trim();
+
+                }
+
+                return '';
+
+            })
+            .filter(Boolean);
+
+
+        console.log(
+            'Current chapter:',
+            currentChapter
+        );
+
+        console.log(
+            'Page URLs:',
+            pageUrls
+        );
+
+
+        /* --------------------------------
+           DISPLAY PAGES
+        -------------------------------- */
+
+        if (!pageUrls.length) {
+
+            pagesEl.innerHTML = `
+                <div class="empty reader-empty">
+
+                    <h2>No chapter pages found</h2>
+
+                    <p class="muted">
+                        This chapter does not have any
+                        image URLs saved in Firestore.
+                    </p>
+
+                    <p class="muted">
+                        Add the GitHub image URLs to this chapter
+                        from the Admin page.
+                    </p>
+
+                </div>
+            `;
+
+        } else {
+
+            pagesEl.innerHTML =
+                pageUrls
+                    .map((url, index) => {
+
+                        return `
+                            <img
+                                src="${esc(url)}"
+                                loading="${index < 2 ? 'eager' : 'lazy'}"
+                                alt="Chapter ${esc(currentChapter.number)} — Page ${index + 1}"
+                                class="reader-page"
+                                onerror="this.classList.add('image-error');"
+                            >
+                        `;
+
+                    })
+                    .join('');
+
+        }
+
+
+        /* --------------------------------
+           SAVE READING HISTORY
+        -------------------------------- */
+
+        await saveHistory(
+            series,
+            currentChapter.number
+        );
+
+
+        /* --------------------------------
+           FOOTER
+        -------------------------------- */
+
+        footerEl.innerHTML = footer();
+
+
+        /* --------------------------------
+           REACTIONS + COMMENTS
+        -------------------------------- */
+
+        await renderSocial();
+
+
+        async function renderSocial() {
+
+            if (!firebaseReady) {
+
+                commentHintEl.textContent =
+                    'Connect Firebase to enable reactions and comments.';
+
+                return;
+
+            }
+
+
+            /* ------------------------------
+               REACTIONS
+            ------------------------------ */
+
+            const types = [
+                ['like', '👍'],
+                ['love', '❤️'],
+                ['fire', '🔥'],
+                ['funny', '😂']
+            ];
+
+
+            const reactionSnapshot =
+                await FB.getDocs(
+                    FB.collection(
+                        db,
+                        'series',
+                        sid,
+                        'chapters',
+                        String(currentChapter.id),
+                        'reactions'
+                    )
+                );
+
+
+            const counts =
+                Object.fromEntries(
+                    types.map(type => [
+                        type[0],
+                        0
+                    ])
+                );
+
+
+            let myReaction = null;
+
+
+            reactionSnapshot.forEach(doc => {
+
+                const data = doc.data();
+
+
+                if (counts[data.type] !== undefined) {
+
+                    counts[data.type]++;
+
+                }
+
+
+                if (
+                    auth?.currentUser?.uid ===
+                    doc.id
+                ) {
+
+                    myReaction = data.type;
+
+                }
+
+            });
+
+
+            reactionsEl.innerHTML =
+                types
+                    .map(([type, emoji]) => {
+
+                        return `
+                            <button
+                                class="reaction ${myReaction === type ? 'active' : ''}"
+                                data-type="${type}"
+                            >
+                                ${emoji}
+                                <span>
+                                    ${counts[type]}
+                                </span>
+                            </button>
+                        `;
+
+                    })
+                    .join('');
+
+
+            document
+                .querySelectorAll('.reaction')
+                .forEach(button => {
+
+                    button.onclick = async () => {
+
+                        if (!auth?.currentUser) {
+
+                            window.location.href =
+                                'auth/login.html';
+
+                            return;
+
+                        }
+
+
+                        const reactionRef =
+                            FB.doc(
+                                db,
+                                'series',
+                                sid,
+                                'chapters',
+                                String(currentChapter.id),
+                                'reactions',
+                                auth.currentUser.uid
+                            );
+
+
+                        const existing =
+                            await FB.getDoc(
+                                reactionRef
+                            );
+
+
+                        if (
+                            existing.exists() &&
+                            existing.data().type ===
+                            button.dataset.type
+                        ) {
+
+                            await FB.deleteDoc(
+                                reactionRef
+                            );
+
+                        } else {
+
+                            await FB.setDoc(
+                                reactionRef,
+                                {
+                                    uid: auth.currentUser.uid,
+                                    type: button.dataset.type,
+                                    updatedAt: FB.serverTimestamp()
+                                }
+                            );
+
+                        }
+
+
+                        await renderSocial();
+
+                    };
+
+                });
+
+
+            /* ------------------------------
+               COMMENT FORM
+            ------------------------------ */
+
+            if (auth?.currentUser) {
+
+                commentFormEl.innerHTML = `
+                    <div class="commentcomposer">
+
+                        <textarea
+                            id="commentText"
+                            class="field"
+                            maxlength="2000"
+                            rows="3"
+                            placeholder="Write a comment..."
+                        ></textarea>
+
+                        <button
+                            id="postComment"
+                            class="btn"
+                        >
+                            Post comment
+                        </button>
+
+                    </div>
+                `;
+
+
+                const commentText =
+                    document.getElementById(
+                        'commentText'
+                    );
+
+
+                const postComment =
+                    document.getElementById(
+                        'postComment'
+                    );
+
+
+                postComment.onclick =
+                    async () => {
+
+                        const text =
+                            commentText.value.trim();
+
+
+                        if (!text) {
+
+                            return;
+
+                        }
+
+
+                        await FB.addDoc(
+                            FB.collection(
+                                db,
+                                'series',
+                                sid,
+                                'chapters',
+                                String(currentChapter.id),
+                                'comments'
+                            ),
+                            {
+                                uid: auth.currentUser.uid,
+
+                                username:
+                                    auth.currentUser.displayName ||
+                                    'Reader',
+
+                                text,
+
+                                createdAt:
+                                    FB.serverTimestamp()
+                            }
+                        );
+
+
+                        commentText.value = '';
+
+                        await renderSocial();
+
+                    };
+
+            } else {
+
+                commentFormEl.innerHTML = `
+                    <div class="notice">
+                        Please
+                        <a href="auth/login.html">
+                            <u>log in</u>
+                        </a>
+                        to comment.
+                    </div>
+                `;
+
+            }
+
+
+            /* ------------------------------
+               LOAD COMMENTS
+            ------------------------------ */
+
+            const commentsSnapshot =
+                await FB.getDocs(
+                    FB.query(
+                        FB.collection(
+                            db,
+                            'series',
+                            sid,
+                            'chapters',
+                            String(currentChapter.id),
+                            'comments'
+                        ),
+                        FB.orderBy(
+                            'createdAt',
+                            'desc'
+                        ),
+                        FB.limit(100)
+                    )
+                );
+
+
+            if (commentsSnapshot.empty) {
+
+                commentListEl.innerHTML = `
+                    <div class="empty">
+                        No comments yet.
+                        Be the first.
+                    </div>
+                `;
+
+            } else {
+
+                commentListEl.innerHTML =
+                    commentsSnapshot.docs
+                        .map(doc => {
+
+                            const data =
+                                doc.data();
+
+
+                            const date =
+                                data.createdAt?.toDate
+                                    ? data.createdAt
+                                        .toDate()
+                                        .toLocaleString()
+                                    : '';
+
+
+                            const deleteButton =
+                                auth?.currentUser?.uid ===
+                                data.uid
+                                    ? `
+                                        <button
+                                            class="linkbtn"
+                                            data-delete="${esc(doc.id)}"
+                                        >
+                                            Delete
+                                        </button>
+                                    `
+                                    : '';
+
+
+                            return `
+                                <article class="comment">
+
+                                    <div class="commenthead">
+
+                                        <strong>
+                                            ${esc(
+                                                data.username ||
+                                                'Reader'
+                                            )}
+                                        </strong>
+
+                                        <span class="muted">
+                                            ${esc(date)}
+                                        </span>
+
+                                    </div>
+
+                                    <div>
+                                        ${esc(data.text)}
+                                    </div>
+
+                                    ${deleteButton}
+
+                                </article>
+                            `;
+
+                        })
+                        .join('');
+
+            }
+
+
+            /* ------------------------------
+               DELETE COMMENTS
+            ------------------------------ */
+
+            document
+                .querySelectorAll('[data-delete]')
+                .forEach(button => {
+
+                    button.onclick =
+                        async () => {
+
+                            await FB.deleteDoc(
+                                FB.doc(
+                                    db,
+                                    'series',
+                                    sid,
+                                    'chapters',
+                                    String(currentChapter.id),
+                                    'comments',
+                                    button.dataset.delete
+                                )
+                            );
+
+
+                            await renderSocial();
+
+                        };
+
+                });
+
+        }
+
+    </script>
+
+</body>
+</html>
