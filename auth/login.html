@@ -1,1 +1,158 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login — Maru Manhwa</title><link rel="stylesheet" href="../css/style.css"></head><body><div id="nav"></div><main class="authbox"><h1>Welcome back</h1><p class="muted">Sign in to sync bookmarks and reading history.</p><div id="msg" class="notice" style="display:none"></div><input id="email" class="field" type="email" placeholder="Email"><input id="password" class="field" type="password" placeholder="Password"><button id="login" class="btn" style="width:100%;margin-top:8px">Log in</button><button id="signup" class="btn secondary" style="width:100%;margin-top:8px">Create account</button></main><div id="footer"></div><script type="module">import {footer,nav} from '../js/app.js';import {auth,FB,firebaseReady} from '../js/firebase.js';nav();let msg=x=>{document.querySelector('#msg').style.display='block';document.querySelector('#msg').textContent=x};login.onclick=async()=>{if(!firebaseReady)return msg('Firebase is not configured yet. Add js/firebase-config.js first.');try{await FB.signInWithEmailAndPassword(auth,email.value,password.value);location.href='../index.html'}catch(e){msg(e.message)}};signup.onclick=async()=>{if(!firebaseReady)return msg('Firebase is not configured yet.');try{let c=await FB.createUserWithEmailAndPassword(auth,email.value,password.value);await FB.setDoc(FB.doc((await import('../js/firebase.js')).db,'users',c.user.uid),{username:email.value.split('@')[0],profilePic:'/assets/profile.png',createdAt:FB.serverTimestamp()});location.href='../index.html'}catch(e){msg(e.message)}};footerEl.innerHTML=footer();</script></body></html>
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Login — Maru Manhwa</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div id="nav"></div>
+
+    <main class="authbox">
+        <h1>Welcome to Maru Manhwa</h1>
+        <p class="muted">Log in or create an account to sync your library.</p>
+
+        <div id="msg" class="notice" style="display:none"></div>
+
+        <input id="username" class="field" type="text" placeholder="Username">
+        <input id="email" class="field" type="email" placeholder="Email">
+        <input id="password" class="field" type="password" placeholder="Password">
+
+        <button id="login" class="btn" style="width:100%;margin-top:8px">
+            Log in
+        </button>
+
+        <button id="signup" class="btn secondary" style="width:100%;margin-top:8px">
+            Create account
+        </button>
+    </main>
+
+    <div id="footer"></div>
+
+    <script type="module">
+        import { footer, nav } from '../js/app.js';
+        import { auth, db, FB, firebaseReady } from '../js/firebase.js';
+
+        nav();
+
+        const msg = document.getElementById('msg');
+        const username = document.getElementById('username');
+        const email = document.getElementById('email');
+        const password = document.getElementById('password');
+        const login = document.getElementById('login');
+        const signup = document.getElementById('signup');
+
+        function showMessage(text) {
+            msg.style.display = 'block';
+            msg.textContent = text;
+        }
+
+        login.onclick = async () => {
+            if (!firebaseReady) {
+                showMessage('Firebase is not configured yet.');
+                return;
+            }
+
+            try {
+                const result = await FB.signInWithEmailAndPassword(
+                    auth,
+                    email.value.trim(),
+                    password.value
+                );
+
+                await FB.reload(result.user);
+
+                if (!result.user.emailVerified) {
+                    await FB.signOut(auth);
+                    showMessage('Please verify your email before logging in.');
+                    return;
+                }
+
+                location.href = '../index.html';
+            } catch (e) {
+                showMessage(e.message);
+            }
+        };
+
+        signup.onclick = async () => {
+            if (!firebaseReady) {
+                showMessage('Firebase is not configured yet.');
+                return;
+            }
+
+            const name = username.value.trim();
+            const mail = email.value.trim();
+            const pass = password.value;
+
+            if (!name) {
+                showMessage('Please enter a username.');
+                return;
+            }
+
+            if (name.length < 3 || name.length > 20) {
+                showMessage('Username must be 3–20 characters.');
+                return;
+            }
+
+            if (!mail) {
+                showMessage('Please enter your email.');
+                return;
+            }
+
+            if (pass.length < 6) {
+                showMessage('Password must be at least 6 characters.');
+                return;
+            }
+
+            try {
+                const usernameQuery = FB.query(
+                    FB.collection(db, 'users'),
+                    FB.where('usernameLower', '==', name.toLowerCase()),
+                    FB.limit(1)
+                );
+
+                const usernameResults = await FB.getDocs(usernameQuery);
+
+                if (!usernameResults.empty) {
+                    showMessage('That username is already taken.');
+                    return;
+                }
+
+                const result = await FB.createUserWithEmailAndPassword(
+                    auth,
+                    mail,
+                    pass
+                );
+
+                await FB.updateProfile(result.user, {
+                    displayName: name
+                });
+
+                await FB.setDoc(
+                    FB.doc(db, 'users', result.user.uid),
+                    {
+                        username: name,
+                        usernameLower: name.toLowerCase(),
+                        email: mail,
+                        profilePic: '/assets/profile.png',
+                        role: 'user',
+                        createdAt: FB.serverTimestamp()
+                    }
+                );
+
+                await FB.sendEmailVerification(result.user);
+                await FB.signOut(auth);
+
+                showMessage(
+                    'Account created! Check your email and verify your email address before logging in.'
+                );
+            } catch (e) {
+                showMessage(e.message);
+            }
+        };
+
+        footerEl.innerHTML = footer();
+    </script>
+</body>
+</html>
