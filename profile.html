@@ -1,1 +1,458 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Profile — Maru Manhwa</title><link rel="stylesheet" href="css/style.css"></head><body><div id="nav"></div><main class="page"><div class="container"><h1>My Library</h1><div class="section"><h2>Bookmarks</h2><div id="bookmarks" class="grid"></div></div><div class="section"><h2>Continue Reading</h2><div id="history" class="grid"></div></div></div></main><div id="footer"></div><script type="module">import {footer,nav,card} from './js/app.js';import {auth,db,FB} from './js/firebase.js';nav();if(!auth){location.href='auth/login.html'}else FB.onAuthStateChanged(auth,async u=>{if(!u)return;let b=await FB.getDocs(FB.collection(db,'users',u.uid,'bookmarks'));bookmarks.innerHTML=b.empty?'<div class="empty">No bookmarks yet.</div>':b.docs.map(d=>card(d.data())).join('');let h=await FB.getDocs(FB.query(FB.collection(db,'users',u.uid,'history'),FB.orderBy('updatedAt','desc')));history.innerHTML=h.empty?'<div class="empty">Nothing to continue.</div>':h.docs.map(d=>`<a class="card" href="reader.html?series=${d.data().seriesId}"><div class="cover"><img src="${d.data().cover}"></div><div class="cardbody"><div class="title">${d.data().title}</div><div class="meta">Continue at Chapter ${d.data().lastChapter}</div></div></a>`).join('')});footerEl.innerHTML=footer();</script></body></html>
+```html
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Account — Maru Manhwa</title>
+
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+    <!-- Navigation -->
+    <div id="nav"></div>
+
+
+    <main class="page">
+
+        <div class="container">
+
+            <!-- Account Header -->
+            <section class="account-header">
+
+                <div class="account-avatar">
+                    <img
+                        id="profileAvatar"
+                        src="assets/profile.png"
+                        alt="Profile"
+                    >
+                </div>
+
+                <div class="account-info">
+
+                    <h1 id="profileName">
+                        Account
+                    </h1>
+
+                    <p id="profileEmail" class="muted">
+                        Loading...
+                    </p>
+
+                    <div class="account-actions">
+
+                        <button
+                            id="logoutButton"
+                            class="btn secondary"
+                            type="button"
+                        >
+                            Log Out
+                        </button>
+
+                        <a
+                            id="adminButton"
+                            class="btn"
+                            href="admin/index.html"
+                            style="display: none;"
+                        >
+                            Admin Panel
+                        </a>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+
+            <!-- My Library -->
+            <section class="section">
+
+                <div class="sectionhead">
+                    <h2>My Library</h2>
+                </div>
+
+
+                <!-- Bookmarks -->
+                <div class="library-section">
+
+                    <h3>Bookmarks</h3>
+
+                    <div
+                        id="bookmarks"
+                        class="grid"
+                    ></div>
+
+                </div>
+
+
+                <!-- Continue Reading -->
+                <div class="library-section">
+
+                    <h3>Continue Reading</h3>
+
+                    <div
+                        id="history"
+                        class="grid"
+                    ></div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+
+    <!-- Footer -->
+    <div id="footer"></div>
+
+
+    <script type="module">
+
+        import {
+            footer,
+            nav,
+            card,
+            esc
+        } from './js/app.js';
+
+        import {
+            auth,
+            db,
+            FB
+        } from './js/firebase.js';
+
+
+        /*
+         * Navigation
+         */
+
+        nav();
+
+
+        /*
+         * Get page elements
+         */
+
+        const profileName = document.getElementById('profileName');
+        const profileEmail = document.getElementById('profileEmail');
+        const profileAvatar = document.getElementById('profileAvatar');
+
+        const logoutButton = document.getElementById('logoutButton');
+        const adminButton = document.getElementById('adminButton');
+
+        const bookmarks = document.getElementById('bookmarks');
+        const history = document.getElementById('history');
+
+        const footerElement = document.getElementById('footer');
+
+
+        /*
+         * Footer
+         */
+
+        footerElement.innerHTML = footer();
+
+
+        /*
+         * Check login
+         */
+
+        if (!auth) {
+
+            window.location.href = 'auth/login.html';
+
+        } else {
+
+            FB.onAuthStateChanged(auth, async (user) => {
+
+                /*
+                 * User is not logged in
+                 */
+
+                if (!user) {
+
+                    window.location.href = 'auth/login.html';
+
+                    return;
+                }
+
+
+                /*
+                 * Account information
+                 */
+
+                profileName.textContent =
+                    user.displayName ||
+                    'Maru Member';
+
+                profileEmail.textContent =
+                    user.email || '';
+
+
+                /*
+                 * Profile picture
+                 */
+
+                if (user.photoURL) {
+
+                    profileAvatar.src = user.photoURL;
+
+                } else {
+
+                    profileAvatar.src =
+                        'assets/profile.png';
+                }
+
+
+                /*
+                 * Check Firestore user document
+                 */
+
+                try {
+
+                    const userRef = FB.doc(
+                        db,
+                        'users',
+                        user.uid
+                    );
+
+                    const userSnap =
+                        await FB.getDoc(userRef);
+
+
+                    if (userSnap.exists()) {
+
+                        const userData =
+                            userSnap.data();
+
+
+                        /*
+                         * Use username from Firestore
+                         * if available.
+                         */
+
+                        if (userData.username) {
+
+                            profileName.textContent =
+                                userData.username;
+                        }
+
+
+                        /*
+                         * Show Admin Panel
+                         * only for admins.
+                         */
+
+                        if (userData.role === 'admin') {
+
+                            adminButton.style.display =
+                                'inline-flex';
+                        }
+
+                    }
+
+                } catch (error) {
+
+                    console.error(
+                        'Could not load account:',
+                        error
+                    );
+
+                }
+
+
+                /*
+                 * Load bookmarks
+                 */
+
+                try {
+
+                    const bookmarkQuery =
+                        FB.collection(
+                            db,
+                            'users',
+                            user.uid,
+                            'bookmarks'
+                        );
+
+                    const bookmarkSnapshot =
+                        await FB.getDocs(bookmarkQuery);
+
+
+                    if (bookmarkSnapshot.empty) {
+
+                        bookmarks.innerHTML = `
+                            <div class="empty">
+                                No bookmarks yet.
+                            </div>
+                        `;
+
+                    } else {
+
+                        bookmarks.innerHTML =
+                            bookmarkSnapshot.docs
+                                .map(document => {
+                                    return card(
+                                        document.data()
+                                    );
+                                })
+                                .join('');
+
+                    }
+
+                } catch (error) {
+
+                    console.error(
+                        'Could not load bookmarks:',
+                        error
+                    );
+
+                    bookmarks.innerHTML = `
+                        <div class="empty">
+                            Could not load bookmarks.
+                        </div>
+                    `;
+                }
+
+
+                /*
+                 * Load reading history
+                 */
+
+                try {
+
+                    const historyQuery =
+                        FB.query(
+                            FB.collection(
+                                db,
+                                'users',
+                                user.uid,
+                                'history'
+                            ),
+                            FB.orderBy(
+                                'updatedAt',
+                                'desc'
+                            )
+                        );
+
+                    const historySnapshot =
+                        await FB.getDocs(
+                            historyQuery
+                        );
+
+
+                    if (historySnapshot.empty) {
+
+                        history.innerHTML = `
+                            <div class="empty">
+                                Nothing to continue.
+                            </div>
+                        `;
+
+                    } else {
+
+                        history.innerHTML =
+                            historySnapshot.docs
+                                .map(document => {
+
+                                    const data =
+                                        document.data();
+
+                                    return `
+                                        <a
+                                            class="card"
+                                            href="reader.html?series=${encodeURIComponent(data.seriesId)}"
+                                        >
+
+                                            <div class="cover">
+
+                                                <img
+                                                    src="${esc(data.cover || 'assets/placeholder.svg')}"
+                                                    alt="${esc(data.title || 'Manhwa')}"
+                                                    loading="lazy"
+                                                >
+
+                                            </div>
+
+                                            <div class="cardbody">
+
+                                                <div class="title">
+                                                    ${esc(data.title || 'Untitled')}
+                                                </div>
+
+                                                <div class="meta">
+                                                    Continue at Chapter
+                                                    ${esc(data.lastChapter || '1')}
+                                                </div>
+
+                                            </div>
+
+                                        </a>
+                                    `;
+
+                                })
+                                .join('');
+
+                    }
+
+                } catch (error) {
+
+                    console.error(
+                        'Could not load reading history:',
+                        error
+                    );
+
+                    history.innerHTML = `
+                        <div class="empty">
+                            Could not load reading history.
+                        </div>
+                    `;
+                }
+
+            });
+
+        }
+
+
+        /*
+         * Logout
+         */
+
+        logoutButton.addEventListener(
+            'click',
+            async () => {
+
+                try {
+
+                    await FB.signOut(auth);
+
+                    window.location.href =
+                        'index.html';
+
+                } catch (error) {
+
+                    console.error(
+                        'Logout failed:',
+                        error
+                    );
+
+                    alert(
+                        'Could not log out. Please try again.'
+                    );
+                }
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>
+```
