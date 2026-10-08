@@ -10,12 +10,15 @@
     <div id="nav"></div>
 
     <main class="authbox">
-        <h1>Welcome to Maru Manhwa</h1>
-        <p class="muted">Log in or create an account to sync your library.</p>
+        <h1 id="title">Welcome back</h1>
+        <p id="subtitle" class="muted">Sign in to sync bookmarks and reading history.</p>
 
         <div id="msg" class="notice" style="display:none"></div>
 
-        <input id="username" class="field" type="text" placeholder="Username">
+        <div id="usernameBox" style="display:none">
+            <input id="username" class="field" type="text" placeholder="Username">
+        </div>
+
         <input id="email" class="field" type="email" placeholder="Email">
         <input id="password" class="field" type="password" placeholder="Password">
 
@@ -23,9 +26,18 @@
             Log in
         </button>
 
-        <button id="signup" class="btn secondary" style="width:100%;margin-top:8px">
+        <button id="signup" class="btn" style="width:100%;margin-top:8px;display:none">
             Create account
         </button>
+
+        <button id="forgot" class="linkbtn" style="display:block;margin:12px auto 0">
+            Forgot password?
+        </button>
+
+        <p id="switchText" class="muted" style="text-align:center;margin-top:18px">
+            Don't have an account?
+            <button id="switch" class="linkbtn">Create one</button>
+        </p>
     </main>
 
     <div id="footer"></div>
@@ -36,16 +48,65 @@
 
         nav();
 
+        const title = document.getElementById('title');
+        const subtitle = document.getElementById('subtitle');
         const msg = document.getElementById('msg');
+        const usernameBox = document.getElementById('usernameBox');
         const username = document.getElementById('username');
         const email = document.getElementById('email');
         const password = document.getElementById('password');
         const login = document.getElementById('login');
         const signup = document.getElementById('signup');
+        const forgot = document.getElementById('forgot');
+        const switchBtn = document.getElementById('switch');
+        const switchText = document.getElementById('switchText');
+
+        let createMode = false;
 
         function showMessage(text) {
             msg.style.display = 'block';
             msg.textContent = text;
+        }
+
+        function setMode(create) {
+            createMode = create;
+            msg.style.display = 'none';
+
+            if (createMode) {
+                title.textContent = 'Create your account';
+                subtitle.textContent = 'Create an account to react, comment and sync your library.';
+
+                usernameBox.style.display = 'block';
+                signup.style.display = 'block';
+                login.style.display = 'none';
+                forgot.style.display = 'none';
+
+                switchText.innerHTML = `
+                    Already have an account?
+                    <button id="switch" class="linkbtn">Log in</button>
+                `;
+
+                document.getElementById('switch').onclick = () => {
+                    setMode(false);
+                };
+            } else {
+                title.textContent = 'Welcome back';
+                subtitle.textContent = 'Sign in to sync bookmarks and reading history.';
+
+                usernameBox.style.display = 'none';
+                signup.style.display = 'none';
+                login.style.display = 'block';
+                forgot.style.display = 'block';
+
+                switchText.innerHTML = `
+                    Don't have an account?
+                    <button id="switch" class="linkbtn">Create one</button>
+                `;
+
+                document.getElementById('switch').onclick = () => {
+                    setMode(true);
+                };
+            }
         }
 
         login.onclick = async () => {
@@ -108,29 +169,39 @@
             try {
                 const usernameQuery = FB.query(
                     FB.collection(db, 'users'),
-                    FB.where('usernameLower', '==', name.toLowerCase()),
+                    FB.where(
+                        'usernameLower',
+                        '==',
+                        name.toLowerCase()
+                    ),
                     FB.limit(1)
                 );
 
-                const usernameResults = await FB.getDocs(usernameQuery);
+                const usernameResults =
+                    await FB.getDocs(usernameQuery);
 
                 if (!usernameResults.empty) {
                     showMessage('That username is already taken.');
                     return;
                 }
 
-                const result = await FB.createUserWithEmailAndPassword(
-                    auth,
-                    mail,
-                    pass
-                );
+                const result =
+                    await FB.createUserWithEmailAndPassword(
+                        auth,
+                        mail,
+                        pass
+                    );
 
                 await FB.updateProfile(result.user, {
                     displayName: name
                 });
 
                 await FB.setDoc(
-                    FB.doc(db, 'users', result.user.uid),
+                    FB.doc(
+                        db,
+                        'users',
+                        result.user.uid
+                    ),
                     {
                         username: name,
                         usernameLower: name.toLowerCase(),
@@ -144,6 +215,8 @@
                 await FB.sendEmailVerification(result.user);
                 await FB.signOut(auth);
 
+                setMode(false);
+
                 showMessage(
                     'Account created! Check your email and verify your email address before logging in.'
                 );
@@ -151,6 +224,35 @@
                 showMessage(e.message);
             }
         };
+
+        forgot.onclick = async () => {
+            if (!firebaseReady) {
+                showMessage('Firebase is not configured yet.');
+                return;
+            }
+
+            const mail = email.value.trim();
+
+            if (!mail) {
+                showMessage('Enter your email first.');
+                return;
+            }
+
+            try {
+                await FB.sendPasswordResetEmail(
+                    auth,
+                    mail
+                );
+
+                showMessage(
+                    'Password reset email sent. Check your inbox.'
+                );
+            } catch (e) {
+                showMessage(e.message);
+            }
+        };
+
+        setMode(false);
 
         footerEl.innerHTML = footer();
     </script>
