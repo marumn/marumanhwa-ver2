@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function signedIn() { return request.auth != null; }
+  function admin() { return signedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; }
+  match /series/{seriesId} {
+    allow read: if true;
+    allow create, update, delete: if admin();
+    match /chapters/{chapterId} {
+      allow read: if true;
+      allow create, update, delete: if admin();
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if signedIn() && request.resource.data.uid == request.auth.uid && request.resource.data.text is string && request.resource.data.text.size() <= 2000;
+        allow update, delete: if signedIn() && resource.data.uid == request.auth.uid;
+      }
+      match /reactions/{uid} {
+        allow read: if true;
+        allow create, update, delete: if signedIn() && request.auth.uid == uid && request.resource.data.type in ['like','love','fire','funny'];
+      }
+    }
+  }
+  match /users/{uid} {
+    allow read: if signedIn() && request.auth.uid == uid;
+    allow create: if signedIn() && request.auth.uid == uid;
+    allow update: if signedIn() && request.auth.uid == uid;
+    allow delete: if false;
+    match /bookmarks/{id} { allow read,write: if signedIn() && request.auth.uid == uid; }
+    match /history/{id} { allow read,write: if signedIn() && request.auth.uid == uid; }
+  }
+ }
+}
