@@ -1,4 +1,4 @@
-```javascript
+javascript
 import {
     auth,
     db,
@@ -658,4 +658,3 @@ export async function toggleBookmark(
     return true;
 
 }
-```
