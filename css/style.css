@@ -959,3 +959,106 @@ textarea.field {
         font-size: 17px;
     }
 }
+
+
+/* Maru Manhwa threaded comments */
+.comment-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 18px 0;
+}
+
+.comment-items,
+#commentItems {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.comment {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 16px;
+    margin: 12px 0;
+    background: #1a1a1a;
+    border: 1px solid #303030;
+    border-radius: 12px;
+}
+
+.commenthead {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.comment-body {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+}
+
+.comment-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 12px;
+}
+
+.linkbtn {
+    padding: 4px 0;
+    color: #aaa;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+}
+
+.linkbtn:hover,
+.linkbtn.active {
+    color: #ff4d7d;
+}
+
+.reply-composer {
+    margin-top: 14px;
+    display: grid;
+    gap: 10px;
+}
+
+.comment-replies {
+    margin: 14px 0 0 12px;
+    padding-left: 14px;
+    border-left: 2px solid #393939;
+}
+
+.reply-comment {
+    background: #202020;
+}
+
+.commentcomposer {
+    display: grid;
+    gap: 12px;
+}
+
+.commentcomposer textarea,
+.reply-composer textarea {
+    box-sizing: border-box;
+    width: 100%;
+    resize: vertical;
+}
+
+@media (max-width: 600px) {
+    .comment {
+        padding: 12px;
+    }
+
+    .comment-replies {
+        margin-left: 4px;
+        padding-left: 9px;
+    }
+}
