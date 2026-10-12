@@ -363,9 +363,11 @@ button {
    SERIES DETAILS
    ========================================= */
 
+
+/* Series page */
 .series {
     display: grid;
-    grid-template-columns: 250px minmax(0, 1fr);
+    grid-template-columns: 250px 1fr;
     gap: 30px;
 }
 
@@ -378,6 +380,7 @@ button {
     margin: 0 0 10px;
 }
 
+/* Tags */
 .tags {
     display: flex;
     flex-wrap: wrap;
@@ -393,6 +396,7 @@ button {
     font-size: 12px;
 }
 
+/* Chapter list */
 .chapterlist {
     margin-top: 25px;
     border: 1px solid var(--line);
@@ -404,7 +408,6 @@ button {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 12px;
     padding: 15px 17px;
     border-bottom: 1px solid var(--line);
     background: var(--panel);
@@ -417,6 +420,25 @@ button {
 .chapter:hover {
     background: var(--panel2);
 }
+
+/* Tablet */
+@media (max-width: 900px) {
+    .series {
+        grid-template-columns: 170px 1fr;
+    }
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+    .series {
+        grid-template-columns: 1fr;
+    }
+
+    .series .cover {
+        width: 210px;
+    }
+}
+
 
 /* =========================================
    MANHWA READER
