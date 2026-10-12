@@ -56,15 +56,15 @@ export function footer() {
 
                 <div class="footerlinks">
 
-                    <a href="privacy.html">
+                    <a href="/privacy">
                         Privacy Policy
                     </a>
 
-                    <a href="terms.html">
+                    <a href="/terms">
                         Terms of Service
                     </a>
 
-                    <a href="dmca.html">
+                    <a href="/dmca">
                         DMCA
                     </a>
 
@@ -72,7 +72,7 @@ export function footer() {
                         Status
                     </a>
 
-                    <a href="report.html">
+                    <a href="/report">
                         Report Issue
                     </a>
 
@@ -132,7 +132,7 @@ export function nav() {
 
                 <a
                     class="logo"
-                    href="index.html"
+                    href="/"
                 >
                     MARU <b>MANHWA</b>
                 </a>
@@ -142,15 +142,15 @@ export function nav() {
 
                 <div class="links">
 
-                    <a href="browse.html">
+                    <a href="/browse">
                         Browse
                     </a>
 
-                    <a href="index.html#latest">
+                    <a href="/index#latest">
                         Latest
                     </a>
 
-                    <a href="index.html#popular">
+                    <a href="/index#popular">
                         Popular
                     </a>
 
@@ -177,7 +177,7 @@ export function nav() {
 
                     <a
                         class="btn"
-                        href="auth/login.html"
+                        href="/auth/login"
                     >
                         Login
                     </a>
@@ -216,7 +216,7 @@ export function nav() {
                     if (query) {
 
                         window.location.href =
-                            'browse.html?q=' +
+                            '/browse?q=' +
                             encodeURIComponent(query);
 
                     }
@@ -265,7 +265,7 @@ export function nav() {
 
                     <a
                         class="btn"
-                        href="auth/login.html"
+                        href="/auth/login"
                     >
                         Login
                     </a>
@@ -351,7 +351,7 @@ export function nav() {
 
                 <a
                     class="btn secondary"
-                    href="profile.html"
+                    href="/profile"
                 >
                     ${esc(username)}
                 </a>
@@ -369,7 +369,7 @@ export function nav() {
 
                     <a
                         class="btn"
-                        href="admin/index.html"
+                        href="/admin/"
                     >
                         Admin
                     </a>
@@ -485,7 +485,7 @@ export function card(series) {
 
         <a
             class="card"
-            href="series.html?id=${encodeURIComponent(series.id)}"
+            href="/series?id=${encodeURIComponent(series.id)}"
         >
 
             <div class="cover">
@@ -493,7 +493,7 @@ export function card(series) {
                 <img
                     src="${esc(
                         series.cover ||
-                        'assets/placeholder.svg'
+                        '/assets/placeholder.svg'
                     )}"
                     alt="${esc(
                         series.title ||
