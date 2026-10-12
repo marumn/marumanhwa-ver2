@@ -66,14 +66,14 @@
             saveHistory,
             esc,
             footer
-        } from './js/app.js';
+        } from '/js/app.js';
 
         import {
             db,
             FB,
             auth,
             firebaseReady
-        } from './js/firebase.js';
+        } from '/js/firebase.js';
 
 
         /* --------------------------------
@@ -224,7 +224,7 @@
 
 
         backEl.href =
-            `series.html?id=${encodeURIComponent(sid)}`;
+            `series?id=${encodeURIComponent(sid)}`;
 
 
         topEl.onclick = () => {
@@ -270,7 +270,7 @@
                 event.target.value;
 
             window.location.href =
-                `reader.html?series=${encodeURIComponent(sid)}&chapter=${encodeURIComponent(newChapter)}`;
+                `reader?series=${encodeURIComponent(sid)}&chapter=${encodeURIComponent(newChapter)}`;
 
         };
 
@@ -433,7 +433,7 @@
     if (!loggedIn) {
 
         commentHintEl.innerHTML = `
-            <a href="auth/login.html">
+            <a href="/auth/login">
                 Log in
             </a>
             to react or comment.
@@ -536,7 +536,7 @@
                 if (!auth?.currentUser) {
 
                     window.location.href =
-                        'auth/login.html';
+                        '/auth/login';
 
                     return;
                 }
@@ -692,7 +692,7 @@
                 <br><br>
 
                 <a
-                    href="auth/login.html"
+                    href="/auth/login"
                     class="btn"
                 >
                     Log In
