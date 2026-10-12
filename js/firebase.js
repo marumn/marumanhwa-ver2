@@ -1,3 +1,4 @@
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 
 import {
@@ -7,6 +8,7 @@ import {
     createUserWithEmailAndPassword,
     signOut,
     updateProfile,
+    reload,
     sendEmailVerification,
     sendPasswordResetEmail,
     GoogleAuthProvider,
@@ -37,58 +39,46 @@ import {
     getDownloadURL
 } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-storage.js";
 
-
 let config;
 
 try {
     config = (
-        await import('./firebase-config.js')
+        await import("./firebase-config.js")
     ).firebaseConfig;
-} catch {
+} catch (error) {
+    console.error("Firebase config could not load:", error);
     config = null;
 }
 
-
 export const firebaseReady =
     !!config &&
-    !String(config.apiKey || '').startsWith('YOUR_');
+    !!config.apiKey &&
+    !String(config.apiKey).startsWith("YOUR_");
 
+let app = null;
 
-const app =
-    firebaseReady
-        ? initializeApp(config)
-        : null;
+if (firebaseReady) {
+    try {
+        app = initializeApp(config);
+    } catch (error) {
+        console.error("Firebase initialization failed:", error);
+    }
+}
 
-
-export const auth =
-    app
-        ? getAuth(app)
-        : null;
-
-
-export const db =
-    app
-        ? getFirestore(app)
-        : null;
-
-
-export const storage =
-    app
-        ? getStorage(app)
-        : null;
-
+export const auth = app ? getAuth(app) : null;
+export const db = app ? getFirestore(app) : null;
+export const storage = app ? getStorage(app) : null;
 
 export const FB = {
-
-    // Auth
+    // Authentication
     onAuthStateChanged,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signOut,
     updateProfile,
+    reload,
     sendEmailVerification,
     sendPasswordResetEmail,
-
     GoogleAuthProvider,
     signInWithPopup,
 
@@ -99,8 +89,8 @@ export const FB = {
     getDocs,
     setDoc,
     addDoc,
-    updateDoc,
     deleteDoc,
+    updateDoc,
     query,
     orderBy,
     limit,
@@ -111,5 +101,4 @@ export const FB = {
     ref,
     uploadBytes,
     getDownloadURL
-
 };
