@@ -412,45 +412,38 @@
            REACTIONS + COMMENTS
         -------------------------------- */
 
-        await renderSocial();
+       
+await renderSocial();
 
-
-       async function renderSocial() {
-
-    if (!firebaseReady) {
+async function renderSocial() {
+    if (!firebaseReady || !db) {
         commentHintEl.textContent =
-            'Connect Firebase to enable reactions and comments.';
+            'Comments are currently unavailable.';
         return;
     }
 
-    const loggedIn = !!auth?.currentUser;
+    const user = auth?.currentUser;
+    const loggedIn = !!user;
+    const chapterPath = [
+        'series', sid,
+        'chapters', String(currentChapter.id)
+    ];
 
+    const commentsRef = FB.collection(
+        db, ...chapterPath, 'comments'
+    );
 
-    /* --------------------------------
-       LOGGED OUT MESSAGE
-    -------------------------------- */
+    const reactionsRef = FB.collection(
+        db, ...chapterPath, 'reactions'
+    );
 
-    if (!loggedIn) {
+    const [reactionSnapshot, commentsSnapshot] =
+        await Promise.all([
+            FB.getDocs(reactionsRef),
+            FB.getDocs(commentsRef)
+        ]);
 
-        commentHintEl.innerHTML = `
-            <a href="/auth/login">
-                Log in
-            </a>
-            to react or comment.
-        `;
-
-    } else {
-
-        commentHintEl.textContent =
-            'You are logged in.';
-
-    }
-
-
-    /* --------------------------------
-       REACTIONS
-    -------------------------------- */
-
+    // CHAPTER REACTIONS
     const types = [
         ['like', '👍'],
         ['love', '❤️'],
@@ -458,382 +451,486 @@
         ['funny', '😂']
     ];
 
-    const reactionSnapshot =
-        await FB.getDocs(
-            FB.collection(
-                db,
-                'series',
-                sid,
-                'chapters',
-                String(currentChapter.id),
-                'reactions'
-            )
-        );
-
-
-    const counts =
-        Object.fromEntries(
-            types.map(type => [
-                type[0],
-                0
-            ])
-        );
-
+    const reactionCounts = Object.fromEntries(
+        types.map(([type]) => [type, 0])
+    );
 
     let myReaction = null;
 
+    reactionSnapshot.forEach(item => {
+        const data = item.data();
 
-    reactionSnapshot.forEach(doc => {
-
-        const data = doc.data();
-
-
-        if (counts[data.type] !== undefined) {
-            counts[data.type]++;
+        if (reactionCounts[data.type] !== undefined) {
+            reactionCounts[data.type]++;
         }
 
-
-        if (
-            loggedIn &&
-            auth.currentUser.uid === doc.id
-        ) {
+        if (loggedIn && item.id === user.uid) {
             myReaction = data.type;
         }
-
     });
 
+    reactionsEl.innerHTML = types.map(([type, emoji]) => `
+        <button
+            class="reaction ${myReaction === type ? 'active' : ''}"
+            data-chapter-reaction="${type}"
+            type="button"
+        >
+            ${emoji} <span>${reactionCounts[type]}</span>
+        </button>
+    `).join('');
 
-    reactionsEl.innerHTML =
-        types
-            .map(([type, emoji]) => {
-
-                return `
-                    <button
-                        class="reaction ${myReaction === type ? 'active' : ''}"
-                        data-type="${type}"
-                    >
-                        ${emoji}
-                        <span>
-                            ${counts[type]}
-                        </span>
-                    </button>
-                `;
-
-            })
-            .join('');
-
-
-    /* --------------------------------
-       REACTION CLICK
-    -------------------------------- */
-
-    document
-        .querySelectorAll('.reaction')
+    reactionsEl.querySelectorAll('[data-chapter-reaction]')
         .forEach(button => {
-
             button.onclick = async () => {
-
                 if (!auth?.currentUser) {
-
-                    window.location.href =
-                        '/auth/login';
-
+                    location.href = '/auth/login';
                     return;
                 }
 
-
-                const reactionRef =
-                    FB.doc(
-                        db,
-                        'series',
-                        sid,
-                        'chapters',
-                        String(currentChapter.id),
-                        'reactions',
-                        auth.currentUser.uid
+                try {
+                    const reactionRef = FB.doc(
+                        db, ...chapterPath,
+                        'reactions', auth.currentUser.uid
                     );
 
+                    const existing = await FB.getDoc(reactionRef);
+                    const type = button.dataset.chapterReaction;
 
-                const existing =
-                    await FB.getDoc(
-                        reactionRef
-                    );
-
-
-                if (
-                    existing.exists() &&
-                    existing.data().type ===
-                    button.dataset.type
-                ) {
-
-                    await FB.deleteDoc(
-                        reactionRef
-                    );
-
-                } else {
-
-                    await FB.setDoc(
-                        reactionRef,
-                        {
+                    if (existing.exists() &&
+                        existing.data().type === type) {
+                        await FB.deleteDoc(reactionRef);
+                    } else {
+                        await FB.setDoc(reactionRef, {
                             uid: auth.currentUser.uid,
-                            type: button.dataset.type,
-                            updatedAt:
-                                FB.serverTimestamp()
-                        }
-                    );
+                            type,
+                            updatedAt: FB.serverTimestamp()
+                        });
+                    }
 
+                    await renderSocial();
+                } catch (error) {
+                    console.error(error);
+                    alert('Could not save your reaction. Check Firestore rules.');
                 }
-
-
-                await renderSocial();
-
             };
-
         });
 
+    // LOGIN STATUS
+    commentHintEl.textContent = loggedIn
+        ? 'Join the discussion.'
+        : 'Log in to comment or vote.';
 
-    /* --------------------------------
-       COMMENT BOX
-    -------------------------------- */
-
-    if (loggedIn) {
-
-        commentFormEl.innerHTML = `
-            <div class="commentcomposer">
-
+    // SORT CONTROLS + COMMENT COUNT
+    commentFormEl.innerHTML = `
+        <div class="commentcomposer">
+            ${loggedIn ? `
                 <textarea
-                    id="commentText"
+                    id="newCommentText"
                     class="field"
                     maxlength="2000"
                     rows="3"
                     placeholder="Write a comment..."
                 ></textarea>
-
-                <button
-                    id="postComment"
-                    class="btn"
-                >
+                <button id="submitNewComment" class="btn" type="button">
                     Post comment
                 </button>
+            ` : `
+                <p class="muted">
+                    <a href="/auth/login">Log in</a> to join the discussion.
+                </p>
+            `}
+        </div>
+    `;
 
+    commentListEl.innerHTML = `
+        <div class="comment-toolbar">
+            <strong>${commentsSnapshot.size} comments</strong>
+            <select id="commentSort" class="field" style="width:auto;margin:0">
+                <option value="best">Best</option>
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+            </select>
+        </div>
+        <div id="commentItems"></div>
+    `;
+
+    const commentItemsEl = document.getElementById('commentItems');
+    const sortEl = document.getElementById('commentSort');
+
+    // LOAD REPLIES AND VOTES
+    const comments = await Promise.all(
+        commentsSnapshot.docs.map(async item => {
+            const data = item.data();
+            const repliesRef = FB.collection(
+                db, ...chapterPath, 'comments',
+                item.id, 'replies'
+            );
+            const votesRef = FB.collection(
+                db, ...chapterPath, 'comments',
+                item.id, 'votes'
+            );
+
+            const [repliesSnap, votesSnap] = await Promise.all([
+                FB.getDocs(repliesRef),
+                FB.getDocs(votesRef)
+            ]);
+
+            let likes = 0;
+            let dislikes = 0;
+            let myVote = 0;
+
+            votesSnap.forEach(voteDoc => {
+                const vote = voteDoc.data();
+
+                if (vote.value === 1) likes++;
+                if (vote.value === -1) dislikes++;
+
+                if (loggedIn && voteDoc.id === user.uid) {
+                    myVote = vote.value;
+                }
+            });
+
+            return {
+                id: item.id,
+                ...data,
+                replies: repliesSnap.docs.map(reply => ({
+                    id: reply.id,
+                    ...reply.data()
+                })),
+                likes,
+                dislikes,
+                myVote,
+                score: likes - dislikes
+            };
+        })
+    );
+
+    const expanded = new Set();
+    const replyForms = new Set();
+
+    function timeOf(item) {
+        return item.createdAt?.toMillis
+            ? item.createdAt.toMillis()
+            : 0;
+    }
+
+    function safeDate(item) {
+        return item.createdAt?.toDate
+            ? item.createdAt.toDate().toLocaleString()
+            : 'Just now';
+    }
+
+    function renderReplies(comment) {
+        if (!expanded.has(comment.id)) return '';
+
+        return `
+            <div class="comment-replies">
+                ${comment.replies.map(reply => `
+                    <article class="comment reply-comment">
+                        <div class="commenthead">
+                            <strong>${esc(reply.username || 'Reader')}</strong>
+                            <span class="muted">${esc(safeDate(reply))}</span>
+                        </div>
+                        <div class="comment-body">${esc(reply.text || '')}</div>
+                        ${loggedIn && user.uid === reply.uid ? `
+                            <button class="linkbtn"
+                                type="button"
+                                data-delete-reply="${esc(comment.id)}|${esc(reply.id)}">
+                                Delete
+                            </button>
+                        ` : ''}
+                    </article>
+                `).join('')}
             </div>
         `;
+    }
 
+    function renderComment(comment) {
+        return `
+            <article class="comment" data-comment-id="${esc(comment.id)}">
+                <div class="commenthead">
+                    <strong>${esc(comment.username || 'Reader')}</strong>
+                    <span class="muted">${esc(safeDate(comment))}</span>
+                </div>
 
-        const commentText =
-            document.getElementById(
-                'commentText'
+                <div class="comment-body">${esc(comment.text || '')}</div>
+
+                <div class="comment-actions">
+                    <button class="linkbtn ${comment.myVote === 1 ? 'active' : ''}"
+                        type="button" data-vote="${esc(comment.id)}" data-value="1">
+                        👍 ${comment.likes}
+                    </button>
+                    <button class="linkbtn ${comment.myVote === -1 ? 'active' : ''}"
+                        type="button" data-vote="${esc(comment.id)}" data-value="-1">
+                        👎 ${comment.dislikes}
+                    </button>
+
+                    ${loggedIn ? `
+                        <button class="linkbtn" type="button"
+                            data-reply-form="${esc(comment.id)}">
+                            Reply
+                        </button>
+                    ` : ''}
+
+                    ${comment.replies.length ? `
+                        <button class="linkbtn" type="button"
+                            data-toggle-replies="${esc(comment.id)}">
+                            ${expanded.has(comment.id) ? 'Hide replies' : 'Show replies'}
+                            (${comment.replies.length})
+                        </button>
+                    ` : ''}
+
+                    ${loggedIn && user.uid === comment.uid ? `
+                        <button class="linkbtn" type="button"
+                            data-delete-comment="${esc(comment.id)}">
+                            Delete
+                        </button>
+                    ` : ''}
+                </div>
+
+                ${replyForms.has(comment.id) && loggedIn ? `
+                    <div class="reply-composer">
+                        <textarea class="field" rows="2" maxlength="2000"
+                            id="replyText-${esc(comment.id)}"
+                            placeholder="Write a reply..."></textarea>
+                        <button class="btn" type="button"
+                            data-submit-reply="${esc(comment.id)}">
+                            Post reply
+                        </button>
+                        <button class="linkbtn" type="button"
+                            data-cancel-reply="${esc(comment.id)}">
+                            Cancel
+                        </button>
+                    </div>
+                ` : ''}
+
+                ${renderReplies(comment)}
+            </article>
+        `;
+    }
+
+    function drawComments() {
+        const sorted = [...comments];
+
+        if (sortEl.value === 'newest') {
+            sorted.sort((a, b) => timeOf(b) - timeOf(a));
+        } else if (sortEl.value === 'oldest') {
+            sorted.sort((a, b) => timeOf(a) - timeOf(b));
+        } else {
+            sorted.sort((a, b) =>
+                (b.score - a.score) || (timeOf(b) - timeOf(a))
             );
+        }
 
+        commentItemsEl.innerHTML = sorted.length
+            ? sorted.map(renderComment).join('')
+            : '<div class="empty">No comments yet. Be the first!</div>';
 
-        const postComment =
-            document.getElementById(
-                'postComment'
-            );
-
-
-        postComment.onclick =
-            async () => {
-
-                const text =
-                    commentText.value.trim();
-
-
-                if (!text) {
+        // VOTE
+        commentItemsEl.querySelectorAll('[data-vote]').forEach(button => {
+            button.onclick = async () => {
+                if (!auth?.currentUser) {
+                    location.href = '/auth/login';
                     return;
                 }
 
-
-                await FB.addDoc(
-                    FB.collection(
-                        db,
-                        'series',
-                        sid,
-                        'chapters',
-                        String(currentChapter.id),
-                        'comments'
-                    ),
-                    {
-                        uid: auth.currentUser.uid,
-
-                        username:
-                            auth.currentUser.displayName ||
-                            'Reader',
-
-                        text,
-
-                        createdAt:
-                            FB.serverTimestamp()
-                    }
+                const commentId = button.dataset.vote;
+                const value = Number(button.dataset.value);
+                const voteRef = FB.doc(
+                    db, ...chapterPath,
+                    'comments', commentId,
+                    'votes', auth.currentUser.uid
                 );
 
+                try {
+                    const existing = await FB.getDoc(voteRef);
 
-                commentText.value = '';
-
-                await renderSocial();
-
-            };
-
-    } else {
-
-        commentFormEl.innerHTML = `
-            <div class="notice login-required">
-
-                🔒
-                <strong>Want to join the discussion?</strong>
-
-                <br>
-
-                <span class="muted">
-                    You need to log in before you can
-                    react or comment.
-                </span>
-
-                <br><br>
-
-                <a
-                    href="/auth/login"
-                    class="btn"
-                >
-                    Log In
-                </a>
-
-            </div>
-        `;
-
-    }
-
-
-    /* --------------------------------
-       LOAD COMMENTS
-    -------------------------------- */
-
-    const commentsSnapshot =
-        await FB.getDocs(
-            FB.query(
-                FB.collection(
-                    db,
-                    'series',
-                    sid,
-                    'chapters',
-                    String(currentChapter.id),
-                    'comments'
-                ),
-                FB.orderBy(
-                    'createdAt',
-                    'desc'
-                ),
-                FB.limit(100)
-            )
-        );
-
-
-    if (commentsSnapshot.empty) {
-
-        commentListEl.innerHTML = `
-            <div class="empty">
-                No comments yet.
-                Be the first.
-            </div>
-        `;
-
-    } else {
-
-        commentListEl.innerHTML =
-            commentsSnapshot.docs
-                .map(doc => {
-
-                    const data =
-                        doc.data();
-
-
-                    const date =
-                        data.createdAt?.toDate
-                            ? data.createdAt
-                                .toDate()
-                                .toLocaleString()
-                            : '';
-
-
-                    const deleteButton =
-                        loggedIn &&
-                        auth.currentUser.uid ===
-                        data.uid
-                            ? `
-                                <button
-                                    class="linkbtn"
-                                    data-delete="${esc(doc.id)}"
-                                >
-                                    Delete
-                                </button>
-                            `
-                            : '';
-
-
-                    return `
-                        <article class="comment">
-
-                            <div class="commenthead">
-
-                                <strong>
-                                    ${esc(
-                                        data.username ||
-                                        'Reader'
-                                    )}
-                                </strong>
-
-                                <span class="muted">
-                                    ${esc(date)}
-                                </span>
-
-                            </div>
-
-                            <div>
-                                ${esc(data.text)}
-                            </div>
-
-                            ${deleteButton}
-
-                        </article>
-                    `;
-
-                })
-                .join('');
-
-    }
-
-
-    /* --------------------------------
-       DELETE COMMENTS
-    -------------------------------- */
-
-    document
-        .querySelectorAll('[data-delete]')
-        .forEach(button => {
-
-            button.onclick =
-                async () => {
-
-                    await FB.deleteDoc(
-                        FB.doc(
-                            db,
-                            'series',
-                            sid,
-                            'chapters',
-                            String(currentChapter.id),
-                            'comments',
-                            button.dataset.delete
-                        )
-                    );
-
+                    if (existing.exists() &&
+                        existing.data().value === value) {
+                        await FB.deleteDoc(voteRef);
+                    } else {
+                        await FB.setDoc(voteRef, {
+                            uid: auth.currentUser.uid,
+                            value,
+                            updatedAt: FB.serverTimestamp()
+                        });
+                    }
 
                     await renderSocial();
-
-                };
-
+                } catch (error) {
+                    console.error(error);
+                    alert('Could not vote. Check Firestore rules.');
+                }
+            };
         });
 
+        // REPLY FORM
+        commentItemsEl.querySelectorAll('[data-reply-form]').forEach(button => {
+            button.onclick = () => {
+                const id = button.dataset.replyForm;
+                replyForms.has(id) ? replyForms.delete(id) : replyForms.add(id);
+                drawComments();
+            };
+        });
+
+        commentItemsEl.querySelectorAll('[data-cancel-reply]').forEach(button => {
+            button.onclick = () => {
+                replyForms.delete(button.dataset.cancelReply);
+                drawComments();
+            };
+        });
+
+        // SHOW / HIDE REPLIES
+        commentItemsEl.querySelectorAll('[data-toggle-replies]').forEach(button => {
+            button.onclick = () => {
+                const id = button.dataset.toggleReplies;
+                expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+                drawComments();
+            };
+        });
+
+        // POST REPLY
+        commentItemsEl.querySelectorAll('[data-submit-reply]').forEach(button => {
+            button.onclick = async () => {
+                const currentUser = auth?.currentUser;
+                if (!currentUser) {
+                    location.href = '/auth/login';
+                    return;
+                }
+
+                const parentId = button.dataset.submitReply;
+                const textarea = document.getElementById(`replyText-${parentId}`);
+                const text = textarea?.value.trim();
+
+                if (!text) return;
+
+                button.disabled = true;
+
+                try {
+                    await FB.addDoc(
+                        FB.collection(
+                            db, ...chapterPath,
+                            'comments', parentId, 'replies'
+                        ),
+                        {
+                            uid: currentUser.uid,
+                            username: currentUser.displayName || 'Reader',
+                            text,
+                            createdAt: FB.serverTimestamp()
+                        }
+                    );
+
+                    expanded.add(parentId);
+                    replyForms.delete(parentId);
+                    await renderSocial();
+                } catch (error) {
+                    console.error(error);
+                    alert('Could not post reply. Check Firestore rules.');
+                    button.disabled = false;
+                }
+            };
+        });
+
+        // DELETE REPLY
+        commentItemsEl.querySelectorAll('[data-delete-reply]').forEach(button => {
+            button.onclick = async () => {
+                const [parentId, replyId] = button.dataset.deleteReply.split('|');
+
+                if (!confirm('Delete this reply?')) return;
+
+                try {
+                    await FB.deleteDoc(FB.doc(
+                        db, ...chapterPath,
+                        'comments', parentId, 'replies', replyId
+                    ));
+                    await renderSocial();
+                } catch (error) {
+                    console.error(error);
+                    alert('Could not delete reply. Check Firestore rules.');
+                }
+            };
+        });
+
+        // DELETE COMMENT AND ITS REPLIES/VOTES
+        commentItemsEl.querySelectorAll('[data-delete-comment]').forEach(button => {
+            button.onclick = async () => {
+                const commentId = button.dataset.deleteComment;
+                if (!confirm('Delete this comment and its replies?')) return;
+
+                try {
+                    const repliesRef = FB.collection(
+                        db, ...chapterPath, 'comments', commentId, 'replies'
+                    );
+                    const votesRef = FB.collection(
+                        db, ...chapterPath, 'comments', commentId, 'votes'
+                    );
+
+                    const [replies, votes] = await Promise.all([
+                        FB.getDocs(repliesRef),
+                        FB.getDocs(votesRef)
+                    ]);
+
+                    // Firestore does not automatically delete subcollections.
+                    for (const item of [...replies.docs, ...votes.docs]) {
+                        await FB.deleteDoc(item.ref);
+                    }
+
+                    await FB.deleteDoc(FB.doc(
+                        db, ...chapterPath, 'comments', commentId
+                    ));
+
+                    await renderSocial();
+                } catch (error) {
+                    console.error(error);
+                    alert('Could not delete comment. Check Firestore rules.');
+                }
+            };
+        });
+    }
+
+    sortEl.onchange = drawComments;
+
+    // POST TOP-LEVEL COMMENT
+    const submitButton = document.getElementById('submitNewComment');
+
+    if (submitButton) {
+        submitButton.onclick = async () => {
+            const currentUser = auth?.currentUser;
+            if (!currentUser) {
+                location.href = '/auth/login';
+                return;
+            }
+
+            const textarea = document.getElementById('newCommentText');
+            const text = textarea?.value.trim();
+
+            if (!text) {
+                textarea?.focus();
+                return;
+            }
+
+            submitButton.disabled = true;
+
+            try {
+                await FB.addDoc(commentsRef, {
+                    uid: currentUser.uid,
+                    username: currentUser.displayName || 'Reader',
+                    text,
+                    createdAt: FB.serverTimestamp()
+                });
+
+                await renderSocial();
+            } catch (error) {
+                console.error(error);
+                alert('Could not post comment. Check Firestore rules.');
+                submitButton.disabled = false;
+            }
+        };
+    }
+
+    drawComments();
 }
+
     </script>
 
 </body>
