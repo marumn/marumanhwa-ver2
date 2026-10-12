@@ -7,12 +7,11 @@
 
     <title>Account — Maru Manhwa</title>
 
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 
 <body>
 
-    <!-- Navigation -->
     <div id="nav"></div>
 
 
@@ -20,13 +19,12 @@
 
         <div class="container">
 
-            <!-- Account Header -->
             <section class="account-header">
 
                 <div class="account-avatar">
                     <img
                         id="profileAvatar"
-                        src="assets/profile.png"
+                        src="/assets/profile.png"
                         alt="Profile"
                     >
                 </div>
@@ -54,7 +52,7 @@
                         <a
                             id="adminButton"
                             class="btn"
-                            href="admin/index.html"
+                            href="/admin"
                             style="display: none;"
                         >
                             Admin Panel
@@ -67,7 +65,6 @@
             </section>
 
 
-            <!-- My Library -->
             <section class="section">
 
                 <div class="sectionhead">
@@ -75,7 +72,6 @@
                 </div>
 
 
-                <!-- Bookmarks -->
                 <div class="library-section">
 
                     <h3>Bookmarks</h3>
@@ -88,7 +84,6 @@
                 </div>
 
 
-                <!-- Continue Reading -->
                 <div class="library-section">
 
                     <h3>Continue Reading</h3>
@@ -107,7 +102,6 @@
     </main>
 
 
-    <!-- Footer -->
     <div id="footer"></div>
 
 
@@ -118,25 +112,19 @@
             nav,
             card,
             esc
-        } from './js/app.js';
+        } from '/js/app.js';
 
         import {
             auth,
             db,
             FB
-        } from './js/firebase.js';
+        } from '/js/firebase.js';
 
 
-        /*
-         * Navigation
-         */
 
         nav();
 
 
-        /*
-         * Get page elements
-         */
 
         const profileName = document.getElementById('profileName');
         const profileEmail = document.getElementById('profileEmail');
@@ -151,40 +139,31 @@
         const footerElement = document.getElementById('footer');
 
 
-        /*
-         * Footer
-         */
+   
 
         footerElement.innerHTML = footer();
 
 
-        /*
-         * Check login
-         */
-
+    
         if (!auth) {
 
-            window.location.href = 'auth/login.html';
+            window.location.href = '/auth/login';
 
         } else {
 
             FB.onAuthStateChanged(auth, async (user) => {
 
-                /*
-                 * User is not logged in
-                 */
+
 
                 if (!user) {
 
-                    window.location.href = 'auth/login.html';
+                    window.location.href = '/auth/login';
 
                     return;
                 }
 
 
-                /*
-                 * Account information
-                 */
+          
 
                 profileName.textContent =
                     user.displayName ||
@@ -194,9 +173,7 @@
                     user.email || '';
 
 
-                /*
-                 * Profile picture
-                 */
+              
 
                 if (user.photoURL) {
 
@@ -205,7 +182,7 @@
                 } else {
 
                     profileAvatar.src =
-                        'assets/profile.png';
+                        '/assets/profile.png';
                 }
 
 
@@ -372,7 +349,7 @@
                                             <div class="cover">
 
                                                 <img
-                                                    src="${esc(data.cover || 'assets/placeholder.svg')}"
+                                                    src="${esc(data.cover || '/assets/placeholder.svg')}"
                                                     alt="${esc(data.title || 'Manhwa')}"
                                                     loading="lazy"
                                                 >
@@ -432,7 +409,7 @@
                     await FB.signOut(auth);
 
                     window.location.href =
-                        'index.html';
+                        '/';
 
                 } catch (error) {
 
