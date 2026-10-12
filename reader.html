@@ -414,37 +414,90 @@
 
        
 
-await renderSocial();
 
 async function renderSocial() {
     if (!firebaseReady || !db) {
-        commentHintEl.textContent =
-            'Comments are currently unavailable.';
+        commentHintEl.textContent = 'Comments are unavailable.';
         return;
     }
 
     const user = auth?.currentUser;
     const loggedIn = !!user;
-    const chapterPath = [
-        'series', sid,
-        'chapters', String(currentChapter.id)
-    ];
+    const base = ['series', sid, 'chapters', String(currentChapter.id)];
+    const rootRef = FB.collection(db, ...base, 'comments');
+    const voteViews = new Map();
+    const replyForms = new Set();
 
-    const commentsRef = FB.collection(
-        db, ...chapterPath, 'comments'
-    );
+    // Relative time: no full date or timestamp
+    function relativeTime(item) {
+        const date = item.createdAt?.toDate
+            ? item.createdAt.toDate().getTime()
+            : Date.now();
 
-    const reactionsRef = FB.collection(
-        db, ...chapterPath, 'reactions'
-    );
+        const seconds = Math.max(0, Math.floor((Date.now() - date) / 1000));
 
-    const [reactionSnapshot, commentsSnapshot] =
-        await Promise.all([
-            FB.getDocs(reactionsRef),
-            FB.getDocs(commentsRef)
+        if (seconds < 60) return 'just now';
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+        if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+        if (seconds < 31536000) return `${Math.floor(seconds / 604800)}w ago`;
+        if (seconds < 315360000) return `${Math.floor(seconds / 2592000)}mo ago`;
+        return `${Math.floor(seconds / 31536000)}y ago`;
+    }
+
+    function timeValue(item) {
+        return item.createdAt?.toMillis ? item.createdAt.toMillis() : 0;
+    }
+
+    function keyOf(path) {
+        return encodeURIComponent(path);
+    }
+
+    function refFromPath(path) {
+        return FB.doc(db, ...path.split('/'));
+    }
+
+    // Read a comment/reply, its votes and its own replies recursively
+    async function loadNode(snapshotDoc) {
+        const data = snapshotDoc.data();
+        const path = snapshotDoc.ref.path;
+
+        const [votesSnap, repliesSnap] = await Promise.all([
+            FB.getDocs(FB.collection(db, ...path.split('/'), 'votes')),
+            FB.getDocs(FB.query(
+                FB.collection(db, ...path.split('/'), 'replies'),
+                FB.orderBy('createdAt', 'asc')
+            ))
         ]);
 
-    // CHAPTER REACTIONS
+        let likes = 0;
+        let dislikes = 0;
+        let myVote = 0;
+
+        votesSnap.forEach(v => {
+            const vote = v.data();
+            if (vote.value === 1) likes++;
+            if (vote.value === -1) dislikes++;
+            if (loggedIn && v.id === user.uid) myVote = vote.value;
+        });
+
+        const replies = await Promise.all(
+            repliesSnap.docs.map(loadNode)
+        );
+
+        return {
+            id: snapshotDoc.id,
+            path,
+            ...data,
+            likes,
+            dislikes,
+            myVote,
+            score: likes - dislikes,
+            replies
+        };
+    }
+
+    // Chapter reactions remain unchanged
     const types = [
         ['like', '👍'],
         ['love', '❤️'],
@@ -452,53 +505,49 @@ async function renderSocial() {
         ['funny', '😂']
     ];
 
-    const reactionCounts = Object.fromEntries(
-        types.map(([type]) => [type, 0])
-    );
+    try {
+        const [chapterVotes, commentsSnap] = await Promise.all([
+            FB.getDocs(FB.collection(db, ...base, 'reactions')),
+            FB.getDocs(FB.query(
+                rootRef,
+                FB.orderBy('createdAt', 'desc'),
+                FB.limit(100)
+            ))
+        ]);
 
-    let myReaction = null;
+        const counts = Object.fromEntries(types.map(([type]) => [type, 0]));
+        let myReaction = null;
 
-    reactionSnapshot.forEach(item => {
-        const data = item.data();
+        chapterVotes.forEach(d => {
+            const type = d.data().type;
+            if (counts[type] !== undefined) counts[type]++;
+            if (loggedIn && d.id === user.uid) myReaction = type;
+        });
 
-        if (reactionCounts[data.type] !== undefined) {
-            reactionCounts[data.type]++;
-        }
+        reactionsEl.innerHTML = types.map(([type, emoji]) => `
+            <button type="button"
+                class="reaction ${myReaction === type ? 'active' : ''}"
+                data-chapter-reaction="${type}">
+                ${emoji} <span>${counts[type]}</span>
+            </button>
+        `).join('');
 
-        if (loggedIn && item.id === user.uid) {
-            myReaction = data.type;
-        }
-    });
-
-    reactionsEl.innerHTML = types.map(([type, emoji]) => `
-        <button
-            class="reaction ${myReaction === type ? 'active' : ''}"
-            data-chapter-reaction="${type}"
-            type="button"
-        >
-            ${emoji} <span>${reactionCounts[type]}</span>
-        </button>
-    `).join('');
-
-    reactionsEl.querySelectorAll('[data-chapter-reaction]')
-        .forEach(button => {
-            button.onclick = async () => {
+        reactionsEl.querySelectorAll('[data-chapter-reaction]').forEach(btn => {
+            btn.onclick = async () => {
                 if (!auth?.currentUser) {
                     location.href = '/auth/login';
                     return;
                 }
 
+                const reactionRef = FB.doc(
+                    db, ...base, 'reactions', auth.currentUser.uid
+                );
+
                 try {
-                    const reactionRef = FB.doc(
-                        db, ...chapterPath,
-                        'reactions', auth.currentUser.uid
-                    );
-
                     const existing = await FB.getDoc(reactionRef);
-                    const type = button.dataset.chapterReaction;
+                    const type = btn.dataset.chapterReaction;
 
-                    if (existing.exists() &&
-                        existing.data().type === type) {
+                    if (existing.exists() && existing.data().type === type) {
                         await FB.deleteDoc(reactionRef);
                     } else {
                         await FB.setDoc(reactionRef, {
@@ -511,426 +560,383 @@ async function renderSocial() {
                     await renderSocial();
                 } catch (error) {
                     console.error(error);
-                    alert('Could not save your reaction. Check Firestore rules.');
+                    alert('Could not save reaction.');
                 }
             };
         });
 
-    // LOGIN STATUS
-    commentHintEl.textContent = loggedIn
-        ? 'Join the discussion.'
-        : 'Log in to comment or vote.';
+        commentHintEl.textContent = loggedIn
+            ? 'Join the discussion.'
+            : 'Log in to comment or vote.';
 
-    // SORT CONTROLS + COMMENT COUNT
-    commentFormEl.innerHTML = `
-        <div class="commentcomposer">
-            ${loggedIn ? `
-                <textarea
-                    id="newCommentText"
-                    class="field"
-                    maxlength="2000"
-                    rows="3"
-                    placeholder="Write a comment..."
-                ></textarea>
+        commentFormEl.innerHTML = loggedIn ? `
+            <div class="commentcomposer">
+                <textarea id="newCommentText" class="field"
+                    maxlength="2000" rows="3"
+                    placeholder="Write a comment..."></textarea>
                 <button id="submitNewComment" class="btn" type="button">
                     Post comment
                 </button>
-            ` : `
-                <p class="muted">
-                    <a href="/auth/login">Log in</a> to join the discussion.
-                </p>
-            `}
-        </div>
-    `;
-
-    commentListEl.innerHTML = `
-        <div class="comment-toolbar">
-            <strong>${commentsSnapshot.size} comments</strong>
-            <select id="commentSort" class="field" style="width:auto;margin:0">
-                <option value="best">Best</option>
-                <option value="newest">Newest</option>
-                <option value="oldest">Oldest</option>
-            </select>
-        </div>
-        <div id="commentItems"></div>
-    `;
-
-    const commentItemsEl = document.getElementById('commentItems');
-    const sortEl = document.getElementById('commentSort');
-
-    // LOAD REPLIES AND VOTES
-    const comments = await Promise.all(
-        commentsSnapshot.docs.map(async item => {
-            const data = item.data();
-            const repliesRef = FB.collection(
-                db, ...chapterPath, 'comments',
-                item.id, 'replies'
-            );
-            const votesRef = FB.collection(
-                db, ...chapterPath, 'comments',
-                item.id, 'votes'
-            );
-
-            const [repliesSnap, votesSnap] = await Promise.all([
-                FB.getDocs(repliesRef),
-                FB.getDocs(votesRef)
-            ]);
-
-            let likes = 0;
-            let dislikes = 0;
-            let myVote = 0;
-
-            votesSnap.forEach(voteDoc => {
-                const vote = voteDoc.data();
-
-                if (vote.value === 1) likes++;
-                if (vote.value === -1) dislikes++;
-
-                if (loggedIn && voteDoc.id === user.uid) {
-                    myVote = vote.value;
-                }
-            });
-
-            return {
-                id: item.id,
-                ...data,
-                replies: repliesSnap.docs.map(reply => ({
-                    id: reply.id,
-                    ...reply.data()
-                })),
-                likes,
-                dislikes,
-                myVote,
-                score: likes - dislikes
-            };
-        })
-    );
-
-    const expanded = new Set();
-    const replyForms = new Set();
-
-    function timeOf(item) {
-        return item.createdAt?.toMillis
-            ? item.createdAt.toMillis()
-            : 0;
-    }
-
-    function safeDate(item) {
-        return item.createdAt?.toDate
-            ? item.createdAt.toDate().toLocaleString()
-            : 'Just now';
-    }
-
-    function renderReplies(comment) {
-        if (!expanded.has(comment.id)) return '';
-
-        return `
-            <div class="comment-replies">
-                ${comment.replies.map(reply => `
-                    <article class="comment reply-comment">
-                        <div class="commenthead">
-                            <strong>${esc(reply.username || 'Reader')}</strong>
-                            <span class="muted">${esc(safeDate(reply))}</span>
-                        </div>
-                        <div class="comment-body">${esc(reply.text || '')}</div>
-                        ${loggedIn && user.uid === reply.uid ? `
-                            <button class="linkbtn"
-                                type="button"
-                                data-delete-reply="${esc(comment.id)}|${esc(reply.id)}">
-                                Delete
-                            </button>
-                        ` : ''}
-                    </article>
-                `).join('')}
             </div>
+        ` : `
+            <p class="muted"><a href="/auth/login">Log in</a> to join the discussion.</p>
         `;
-    }
 
-    function renderComment(comment) {
-        return `
-            <article class="comment" data-comment-id="${esc(comment.id)}">
-                <div class="commenthead">
-                    <strong>${esc(comment.username || 'Reader')}</strong>
-                    <span class="muted">${esc(safeDate(comment))}</span>
-                </div>
+        const comments = await Promise.all(commentsSnap.docs.map(loadNode));
 
-                <div class="comment-body">${esc(comment.text || '')}</div>
-
-                <div class="comment-actions">
-                    <button class="linkbtn ${comment.myVote === 1 ? 'active' : ''}"
-                        type="button" data-vote="${esc(comment.id)}" data-value="1">
-                        👍 ${comment.likes}
-                    </button>
-                    <button class="linkbtn ${comment.myVote === -1 ? 'active' : ''}"
-                        type="button" data-vote="${esc(comment.id)}" data-value="-1">
-                        👎 ${comment.dislikes}
-                    </button>
-
-                    ${loggedIn ? `
-                        <button class="linkbtn" type="button"
-                            data-reply-form="${esc(comment.id)}">
-                            Reply
-                        </button>
-                    ` : ''}
-
-                    ${comment.replies.length ? `
-                        <button class="linkbtn" type="button"
-                            data-toggle-replies="${esc(comment.id)}">
-                            ${expanded.has(comment.id) ? 'Hide replies' : 'Show replies'}
-                            (${comment.replies.length})
-                        </button>
-                    ` : ''}
-
-                    ${loggedIn && user.uid === comment.uid ? `
-                        <button class="linkbtn" type="button"
-                            data-delete-comment="${esc(comment.id)}">
-                            Delete
-                        </button>
-                    ` : ''}
-                </div>
-
-                ${replyForms.has(comment.id) && loggedIn ? `
-                    <div class="reply-composer">
-                        <textarea class="field" rows="2" maxlength="2000"
-                            id="replyText-${esc(comment.id)}"
-                            placeholder="Write a reply..."></textarea>
-                        <button class="btn" type="button"
-                            data-submit-reply="${esc(comment.id)}">
-                            Post reply
-                        </button>
-                        <button class="linkbtn" type="button"
-                            data-cancel-reply="${esc(comment.id)}">
-                            Cancel
-                        </button>
-                    </div>
-                ` : ''}
-
-                ${renderReplies(comment)}
-            </article>
-        `;
-    }
-
-    function drawComments() {
-        const sorted = [...comments];
-
-        if (sortEl.value === 'newest') {
-            sorted.sort((a, b) => timeOf(b) - timeOf(a));
-        } else if (sortEl.value === 'oldest') {
-            sorted.sort((a, b) => timeOf(a) - timeOf(b));
-        } else {
-            sorted.sort((a, b) =>
-                (b.score - a.score) || (timeOf(b) - timeOf(a))
+        // Count top-level comments and all nested replies
+        function countAll(nodes) {
+            return nodes.reduce((total, node) =>
+                total + 1 + countAll(node.replies), 0
             );
         }
 
-        commentItemsEl.innerHTML = sorted.length
-            ? sorted.map(renderComment).join('')
-            : '<div class="empty">No comments yet. Be the first!</div>';
+        commentListEl.innerHTML = `
+            <div class="comment-toolbar">
+                <strong>${countAll(comments)} comments</strong>
+                <select id="commentSort" class="field" style="width:auto;margin:0">
+                    <option value="best">Best</option>
+                    <option value="newest">Newest</option>
+                    <option value="oldest">Oldest</option>
+                </select>
+            </div>
+            <div id="commentItems"></div>
+        `;
 
-        // VOTE
-        commentItemsEl.querySelectorAll('[data-vote]').forEach(button => {
-            button.onclick = async () => {
-                if (!auth?.currentUser) {
-                    location.href = '/auth/login';
-                    return;
-                }
+        const itemsEl = document.getElementById('commentItems');
+        const sortEl = document.getElementById('commentSort');
 
-                const commentId = button.dataset.vote;
-                const value = Number(button.dataset.value);
-                const voteRef = FB.doc(
-                    db, ...chapterPath,
-                    'comments', commentId,
-                    'votes', auth.currentUser.uid
+        // Preserve the selected sorting option after votes/replies refresh
+        sortEl.value = window.marummCommentSort || 'best';
+        sortEl.onchange = () => {
+            window.marummCommentSort = sortEl.value;
+            draw();
+        };
+
+        // Default view: first 3 replies. "hidden" hides all;
+        // "all" expands all replies.
+        function replyMode(node) {
+            return voteViews.get(node.path) || 'preview';
+        }
+
+        function renderNode(node, isReply = false) {
+            const key = keyOf(node.path);
+            const mode = replyMode(node);
+            const visibleReplies = mode === 'hidden'
+                ? []
+                : mode === 'all'
+                    ? node.replies
+                    : node.replies.slice(0, 3);
+
+            const hasReplies = node.replies.length > 0;
+            const remaining = node.replies.length - 3;
+
+            const upIcon = `
+                <svg class="vote-icon" viewBox="0 0 24 24"
+                    aria-hidden="true" focusable="false">
+                    <path d="M7 10v11H4V10h3Zm3 11h7.2a2 2 0 0 0 1.95-1.55l1.6-7A2 2 0 0 0 18.8 10H14l.7-3.2a2.3 2.3 0 0 0-1.1-2.5L12.5 4 8 10v9a2 2 0 0 0 2 2Z"/>
+                </svg>`;
+
+            const downIcon = `
+                <svg class="vote-icon down" viewBox="0 0 24 24"
+                    aria-hidden="true" focusable="false">
+                    <path d="M7 14V3H4v11h3Zm3-11h7.2a2 2 0 0 1 1.95 1.55l1.6 7A2 2 0 0 1 18.8 14H14l.7 3.2a2.3 2.3 0 0 1-1.1 2.5l-1.1.3L8 14V5a2 2 0 0 1 2-2Z"/>
+                </svg>`;
+
+            return `
+                <article class="comment ${isReply ? 'reply-comment' : ''}">
+                    <div class="commenthead">
+                        <strong>${esc(node.username || 'Reader')}</strong>
+                        <span class="muted comment-time"
+                            title="${esc(relativeTime(node))}">
+                            ${esc(relativeTime(node))}
+                        </span>
+                    </div>
+
+                    <div class="comment-body">${esc(node.text || '')}</div>
+
+                    <div class="comment-actions">
+                        <button type="button"
+                            class="vote-button ${node.myVote === 1 ? 'active' : ''}"
+                            aria-label="Like"
+                            title="Like"
+                            data-vote="${key}" data-value="1">
+                            ${upIcon}<span>${node.likes}</span>
+                        </button>
+
+                        <button type="button"
+                            class="vote-button ${node.myVote === -1 ? 'active dislike-active' : ''}"
+                            aria-label="Dislike"
+                            title="Dislike"
+                            data-vote="${key}" data-value="-1">
+                            ${downIcon}<span>${node.dislikes}</span>
+                        </button>
+
+                        ${loggedIn ? `
+                            <button type="button" class="linkbtn"
+                                data-reply="${key}">Reply</button>
+                        ` : ''}
+
+                        ${loggedIn && user.uid === node.uid ? `
+                            <button type="button" class="linkbtn"
+                                data-delete="${key}">Delete</button>
+                        ` : ''}
+                    </div>
+
+                    ${replyForms.has(node.path) && loggedIn ? `
+                        <div class="reply-composer">
+                            <textarea class="field" rows="2" maxlength="2000"
+                                id="replyText-${key}"
+                                placeholder="Write a reply..."></textarea>
+                            <button type="button" class="btn"
+                                data-send-reply="${key}">Post reply</button>
+                            <button type="button" class="linkbtn"
+                                data-cancel-reply="${key}">Cancel</button>
+                        </div>
+                    ` : ''}
+
+                    ${hasReplies ? `
+                        <div class="comment-replies">
+                            ${visibleReplies.map(reply => renderNode(reply, true)).join('')}
+                        </div>
+                        <div class="reply-list-actions">
+                            ${mode === 'hidden' ? `
+                                <button type="button" class="linkbtn"
+                                    data-show-replies="${key}">
+                                    Show replies (${node.replies.length})
+                                </button>
+                            ` : mode === 'all' ? `
+                                <button type="button" class="linkbtn"
+                                    data-hide-replies="${key}">
+                                    Hide replies
+                                </button>
+                            ` : `
+                                ${remaining > 0 ? `
+                                    <button type="button" class="linkbtn"
+                                        data-more-replies="${key}">
+                                        Show more replies (${remaining})
+                                    </button>
+                                ` : ''}
+                                <button type="button" class="linkbtn"
+                                    data-hide-replies="${key}">
+                                    Hide replies
+                                </button>
+                            `}
+                        </div>
+                    ` : ''}
+                </article>
+            `;
+        }
+
+        function draw() {
+            const sorted = [...comments];
+            const sort = sortEl.value;
+
+            if (sort === 'newest') {
+                sorted.sort((a, b) => timeValue(b) - timeValue(a));
+            } else if (sort === 'oldest') {
+                sorted.sort((a, b) => timeValue(a) - timeValue(b));
+            } else {
+                sorted.sort((a, b) =>
+                    (b.score - a.score) || (timeValue(b) - timeValue(a))
                 );
+            }
 
-                try {
-                    const existing = await FB.getDoc(voteRef);
+            itemsEl.innerHTML = sorted.length
+                ? sorted.map(node => renderNode(node)).join('')
+                : '<div class="empty">No comments yet. Be the first!</div>';
 
-                    if (existing.exists() &&
-                        existing.data().value === value) {
-                        await FB.deleteDoc(voteRef);
-                    } else {
-                        await FB.setDoc(voteRef, {
-                            uid: auth.currentUser.uid,
-                            value,
-                            updatedAt: FB.serverTimestamp()
-                        });
+            // Like / dislike any comment or reply
+            itemsEl.querySelectorAll('[data-vote]').forEach(btn => {
+                btn.onclick = async () => {
+                    if (!auth?.currentUser) {
+                        location.href = '/auth/login';
+                        return;
                     }
 
-                    await renderSocial();
-                } catch (error) {
-                    console.error(error);
-                    alert('Could not vote. Check Firestore rules.');
+                    const path = decodeURIComponent(btn.dataset.vote);
+                    const value = Number(btn.dataset.value);
+                    const voteRef = FB.doc(
+                        db, ...path.split('/'), 'votes', auth.currentUser.uid
+                    );
+
+                    try {
+                        const old = await FB.getDoc(voteRef);
+
+                        if (old.exists() && old.data().value === value) {
+                            await FB.deleteDoc(voteRef);
+                        } else {
+                            await FB.setDoc(voteRef, {
+                                uid: auth.currentUser.uid,
+                                value,
+                                updatedAt: FB.serverTimestamp()
+                            });
+                        }
+
+                        await renderSocial();
+                    } catch (error) {
+                        console.error(error);
+                        alert('Could not save vote. Check Firestore rules.');
+                    }
+                };
+            });
+
+            itemsEl.querySelectorAll('[data-reply]').forEach(btn => {
+                btn.onclick = () => {
+                    const path = decodeURIComponent(btn.dataset.reply);
+                    replyForms.has(path)
+                        ? replyForms.delete(path)
+                        : replyForms.add(path);
+                    draw();
+                };
+            });
+
+            itemsEl.querySelectorAll('[data-cancel-reply]').forEach(btn => {
+                btn.onclick = () => {
+                    replyForms.delete(decodeURIComponent(btn.dataset.cancelReply));
+                    draw();
+                };
+            });
+
+            itemsEl.querySelectorAll('[data-more-replies]').forEach(btn => {
+                btn.onclick = () => {
+                    voteViews.set(decodeURIComponent(btn.dataset.moreReplies), 'all');
+                    draw();
+                };
+            });
+
+            itemsEl.querySelectorAll('[data-hide-replies]').forEach(btn => {
+                btn.onclick = () => {
+                    voteViews.set(decodeURIComponent(btn.dataset.hideReplies), 'hidden');
+                    draw();
+                };
+            });
+
+            itemsEl.querySelectorAll('[data-show-replies]').forEach(btn => {
+                btn.onclick = () => {
+                    voteViews.set(decodeURIComponent(btn.dataset.showReplies), 'preview');
+                    draw();
+                };
+            });
+
+            // Reply to a comment OR another reply
+            itemsEl.querySelectorAll('[data-send-reply]').forEach(btn => {
+                btn.onclick = async () => {
+                    const currentUser = auth?.currentUser;
+                    if (!currentUser) {
+                        location.href = '/auth/login';
+                        return;
+                    }
+
+                    const parentPath = decodeURIComponent(btn.dataset.sendReply);
+                    const textarea = document.getElementById(`replyText-${btn.dataset.sendReply}`);
+                    const text = textarea?.value.trim();
+                    if (!text) return;
+
+                    btn.disabled = true;
+
+                    try {
+                        await FB.addDoc(
+                            FB.collection(db, ...parentPath.split('/'), 'replies'),
+                            {
+                                uid: currentUser.uid,
+                                username: currentUser.displayName || 'Reader',
+                                text,
+                                createdAt: FB.serverTimestamp()
+                            }
+                        );
+
+                        voteViews.set(parentPath, 'preview');
+                        replyForms.delete(parentPath);
+                        await renderSocial();
+                    } catch (error) {
+                        console.error(error);
+                        alert('Could not post reply. Check Firestore rules.');
+                        btn.disabled = false;
+                    }
+                };
+            });
+
+            // Delete your own comment/reply and its nested content
+            async function deleteTree(path) {
+                const ref = refFromPath(path);
+
+                const [replies, votes] = await Promise.all([
+                    FB.getDocs(FB.collection(db, ...path.split('/'), 'replies')),
+                    FB.getDocs(FB.collection(db, ...path.split('/'), 'votes'))
+                ]);
+
+                for (const reply of replies.docs) {
+                    await deleteTree(reply.ref.path);
                 }
-            };
-        });
 
-        // REPLY FORM
-        commentItemsEl.querySelectorAll('[data-reply-form]').forEach(button => {
-            button.onclick = () => {
-                const id = button.dataset.replyForm;
-                replyForms.has(id) ? replyForms.delete(id) : replyForms.add(id);
-                drawComments();
-            };
-        });
+                for (const vote of votes.docs) {
+                    await FB.deleteDoc(vote.ref);
+                }
 
-        commentItemsEl.querySelectorAll('[data-cancel-reply]').forEach(button => {
-            button.onclick = () => {
-                replyForms.delete(button.dataset.cancelReply);
-                drawComments();
-            };
-        });
+                await FB.deleteDoc(ref);
+            }
 
-        // SHOW / HIDE REPLIES
-        commentItemsEl.querySelectorAll('[data-toggle-replies]').forEach(button => {
-            button.onclick = () => {
-                const id = button.dataset.toggleReplies;
-                expanded.has(id) ? expanded.delete(id) : expanded.add(id);
-                drawComments();
-            };
-        });
+            itemsEl.querySelectorAll('[data-delete]').forEach(btn => {
+                btn.onclick = async () => {
+                    const path = decodeURIComponent(btn.dataset.delete);
+                    if (!confirm('Delete this comment and all its replies?')) return;
 
-        // POST REPLY
-        commentItemsEl.querySelectorAll('[data-submit-reply]').forEach(button => {
-            button.onclick = async () => {
+                    try {
+                        await deleteTree(path);
+                        await renderSocial();
+                    } catch (error) {
+                        console.error(error);
+                        alert('Could not delete. Check Firestore rules.');
+                    }
+                };
+            });
+        }
+
+        // Post a new top-level comment
+        const postBtn = document.getElementById('submitNewComment');
+
+        if (postBtn) {
+            postBtn.onclick = async () => {
                 const currentUser = auth?.currentUser;
                 if (!currentUser) {
                     location.href = '/auth/login';
                     return;
                 }
 
-                const parentId = button.dataset.submitReply;
-                const textarea = document.getElementById(`replyText-${parentId}`);
+                const textarea = document.getElementById('newCommentText');
                 const text = textarea?.value.trim();
-
-                if (!text) return;
-
-                button.disabled = true;
-
-                try {
-                    await FB.addDoc(
-                        FB.collection(
-                            db, ...chapterPath,
-                            'comments', parentId, 'replies'
-                        ),
-                        {
-                            uid: currentUser.uid,
-                            username: currentUser.displayName || 'Reader',
-                            text,
-                            createdAt: FB.serverTimestamp()
-                        }
-                    );
-
-                    expanded.add(parentId);
-                    replyForms.delete(parentId);
-                    await renderSocial();
-                } catch (error) {
-                    console.error(error);
-                    alert('Could not post reply. Check Firestore rules.');
-                    button.disabled = false;
+                if (!text) {
+                    textarea?.focus();
+                    return;
                 }
-            };
-        });
 
-        // DELETE REPLY
-        commentItemsEl.querySelectorAll('[data-delete-reply]').forEach(button => {
-            button.onclick = async () => {
-                const [parentId, replyId] = button.dataset.deleteReply.split('|');
-
-                if (!confirm('Delete this reply?')) return;
+                postBtn.disabled = true;
 
                 try {
-                    await FB.deleteDoc(FB.doc(
-                        db, ...chapterPath,
-                        'comments', parentId, 'replies', replyId
-                    ));
-                    await renderSocial();
-                } catch (error) {
-                    console.error(error);
-                    alert('Could not delete reply. Check Firestore rules.');
-                }
-            };
-        });
-
-        // DELETE COMMENT AND ITS REPLIES/VOTES
-        commentItemsEl.querySelectorAll('[data-delete-comment]').forEach(button => {
-            button.onclick = async () => {
-                const commentId = button.dataset.deleteComment;
-                if (!confirm('Delete this comment and its replies?')) return;
-
-                try {
-                    const repliesRef = FB.collection(
-                        db, ...chapterPath, 'comments', commentId, 'replies'
-                    );
-                    const votesRef = FB.collection(
-                        db, ...chapterPath, 'comments', commentId, 'votes'
-                    );
-
-                    const [replies, votes] = await Promise.all([
-                        FB.getDocs(repliesRef),
-                        FB.getDocs(votesRef)
-                    ]);
-
-                    // Firestore does not automatically delete subcollections.
-                    for (const item of [...replies.docs, ...votes.docs]) {
-                        await FB.deleteDoc(item.ref);
-                    }
-
-                    await FB.deleteDoc(FB.doc(
-                        db, ...chapterPath, 'comments', commentId
-                    ));
+                    await FB.addDoc(rootRef, {
+                        uid: currentUser.uid,
+                        username: currentUser.displayName || 'Reader',
+                        text,
+                        createdAt: FB.serverTimestamp()
+                    });
 
                     await renderSocial();
                 } catch (error) {
                     console.error(error);
-                    alert('Could not delete comment. Check Firestore rules.');
+                    alert('Could not post comment. Check Firestore rules.');
+                    postBtn.disabled = false;
                 }
             };
-        });
+        }
+
+        draw();
+    } catch (error) {
+        console.error('Comments failed to load:', error);
+        commentHintEl.textContent = 'Could not load comments. Check Firestore rules.';
     }
-
-    sortEl.onchange = drawComments;
-
-    // POST TOP-LEVEL COMMENT
-    const submitButton = document.getElementById('submitNewComment');
-
-    if (submitButton) {
-        submitButton.onclick = async () => {
-            const currentUser = auth?.currentUser;
-            if (!currentUser) {
-                location.href = '/auth/login';
-                return;
-            }
-
-            const textarea = document.getElementById('newCommentText');
-            const text = textarea?.value.trim();
-
-            if (!text) {
-                textarea?.focus();
-                return;
-            }
-
-            submitButton.disabled = true;
-
-            try {
-                await FB.addDoc(commentsRef, {
-                    uid: currentUser.uid,
-                    username: currentUser.displayName || 'Reader',
-                    text,
-                    createdAt: FB.serverTimestamp()
-                });
-
-                await renderSocial();
-            } catch (error) {
-                console.error(error);
-                alert('Could not post comment. Check Firestore rules.');
-                submitButton.disabled = false;
-            }
-        };
-    }
-
-    drawComments();
 }
+
 
     </script>
 
