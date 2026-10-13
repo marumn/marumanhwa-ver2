@@ -1063,3 +1063,77 @@ textarea.field {
         padding-left: 9px;
     }
 }
+
+reader-social .vote-button {
+appearance: none;
+-webkit-appearance: none;
+display: inline-flex;
+align-items: center;
+justify-content: center;
+gap: 6px;
+
+background: transparent !important;
+background-color: transparent !important;
+color: #999 !important;
+
+border: 1px solid transparent !important;
+border-radius: 8px;
+box-shadow: none !important;
+outline: none;
+
+padding: 5px 8px;
+min-width: 38px;
+min-height: 32px;
+
+font: inherit;
+font-size: 13px;
+cursor: pointer;
+
+transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+
+}
+
+.reader-social .vote-button .vote-icon {
+display: block;
+width: 18px;
+height: 18px;
+flex-shrink: 0;
+
+fill: none !important;
+stroke: currentColor !important;
+stroke-width: 1.7;
+stroke-linecap: round;
+stroke-linejoin: round;
+
+}
+
+.reader-social .vote-button {
+background: #292929 !important;
+color: #f2f2f2 !important;
+}
+
+.reader-social .vote-button.active {
+background: rgba(255, 77, 125, 0.12) !important;
+color: #ff4d7d !important;
+}
+
+.reader-social .vote-button.dislike-active {
+background: rgba(143, 169, 255, 0.12) !important;
+color: #8fa9ff !important;
+}
+
+.reader-social .vote-button span {
+color: inherit;
+line-height: 1;
+}
+
+.reader-social .vote-button {
+outline: 2px solid #ff4d7d;
+outline-offset: 2px;
+}
+
+.reader-social .vote-button {
+transform: scale(0.96);
+}
