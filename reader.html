@@ -427,6 +427,42 @@ async function renderSocial() {
     const rootRef = FB.collection(db, ...base, 'comments');
     const voteViews = new Map();
     const replyForms = new Set();
+    const profileCache = new Map();
+
+    async function getUserProfile(uid) {
+        if (!uid) {
+            return {
+                username: 'Reader',
+                profilePic: '/assets/profile.png',
+                role: 'Member'
+            };
+        }
+
+        if (!profileCache.has(uid)) {
+            const request = FB.getDoc(FB.doc(db, 'users', uid))
+                .then(snapshot => {
+                    const data = snapshot.exists() ? snapshot.data() : {};
+
+                    return {
+                        username: data.username || '',
+                        profilePic: data.profilePic || '/assets/profile.png',
+                        role: data.role || 'Member'
+                    };
+                })
+                .catch(error => {
+                    console.error('Could not load user profile:', error);
+                    return {
+                        username: '',
+                        profilePic: '/assets/profile.png',
+                        role: 'Member'
+                    };
+                });
+
+            profileCache.set(uid, request);
+        }
+
+        return profileCache.get(uid);
+    }
 
     // Relative time: no full date or timestamp
     function relativeTime(item) {
@@ -459,8 +495,10 @@ async function renderSocial() {
 
     // Read a comment/reply, its votes and its own replies recursively
     async function loadNode(snapshotDoc) {
-        const data = snapshotDoc.data();
-        const path = snapshotDoc.ref.path;
+       const data = snapshotDoc.data();
+const path = snapshotDoc.ref.path;
+const profile = await getUserProfile(data.uid);
+
 
         const [votesSnap, repliesSnap] = await Promise.all([
             FB.getDocs(FB.collection(db, ...path.split('/'), 'votes')),
@@ -485,10 +523,12 @@ async function renderSocial() {
             repliesSnap.docs.map(loadNode)
         );
 
-        return {
-            id: snapshotDoc.id,
-            path,
-            ...data,
+       
+return {
+    id: snapshotDoc.id,
+    path,
+    ...data,
+    profile,
             likes,
             dislikes,
             myVote,
@@ -644,14 +684,34 @@ async function renderSocial() {
                 </svg>`;
 
             return `
-                <article class="comment ${isReply ? 'reply-comment' : ''}">
-                    <div class="commenthead">
-                        <strong>${esc(node.username || 'Reader')}</strong>
-                        <span class="muted comment-time"
-                            title="${esc(relativeTime(node))}">
-                            ${esc(relativeTime(node))}
-                        </span>
-                    </div>
+                <article class="comment ${isReply ? 'reply-comment' : ''}">     
+<div class="commenthead">
+    <img
+        class="comment-avatar"
+        src="${esc(node.profile?.profilePic || '/assets/profile.png')}"
+        alt=""
+        loading="lazy"
+        onerror="this.onerror=null;this.src='/assets/profile.png';"
+    >
+
+    <div class="comment-author">
+        <div class="comment-author-line">
+            <strong>${esc(node.profile?.username || node.username || 'Reader')}</strong>
+
+            <span class="comment-role role-${esc(
+                String(node.profile?.role || 'Member').toLowerCase().replace(/[^a-z0-9_-]/g, '')
+            )}">
+                ${esc(node.profile?.role || 'Member')}
+            </span>
+        </div>
+
+        <span class="muted comment-time"
+            title="${esc(relativeTime(node))}">
+            ${esc(relativeTime(node))}
+        </span>
+    </div>
+</div>
+
 
                     <div class="comment-body">${esc(node.text || '')}</div>
 
