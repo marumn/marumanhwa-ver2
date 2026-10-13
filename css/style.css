@@ -1170,3 +1170,60 @@ textarea.field {
     opacity: .55;
     cursor: not-allowed;
 }
+
+/* Comment profile pictures and role badges */
+.reader-social .commenthead {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.reader-social .comment-avatar {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
+    object-fit: cover;
+    border-radius: 50%;
+    background: #292929;
+    border: 1px solid #383838;
+}
+
+.reader-social .comment-author {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.reader-social .comment-author-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.reader-social .comment-role {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: #292930;
+    border: 1px solid #3a3a43;
+    color: #bdbdc8;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.reader-social .comment-role.role-admin {
+    background: rgba(255, 77, 125, .12);
+    border-color: rgba(255, 77, 125, .35);
+    color: #ff4d7d;
+}
+
+.reader-social .comment-time {
+    font-size: 12px;
+}
+
