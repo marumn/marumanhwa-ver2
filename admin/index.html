@@ -281,7 +281,11 @@ STAFF ONLY
          * Navigation
          */
 
-        nav();
+        try {
+    nav();
+} catch (error) {
+    console.error('Navigation error:', error);
+}
 
 
         /*
