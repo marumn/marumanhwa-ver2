@@ -423,18 +423,12 @@ if (!firebaseReady || !auth) {
 
                     try {
 
-                       if (!isAdmin || !auth || !auth.currentUser) {
+                      
+if (!isAdmin || !auth || !auth.currentUser) {
     denyAccess();
     return;
 }
 
-                            alert(
-                                'You are not logged in.'
-                            );
-
-                            return;
-
-                        }
 
 
                         const seriesId =
@@ -635,18 +629,12 @@ if (!firebaseReady || !auth) {
 
                     try {
 
-                      if (!isAdmin || !auth || !auth.currentUser) {
+                    
+if (!isAdmin || !auth || !auth.currentUser) {
     denyAccess();
     return;
 }
 
-                            alert(
-                                'You are not logged in.'
-                            );
-
-                            return;
-
-                        }
 
 
                         const seriesId =
