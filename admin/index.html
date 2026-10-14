@@ -26,7 +26,7 @@
     <div id="nav"></div>
 
 
-    <main class="page">
+   <main class="page" id="adminContent" style="display: none;">
 
         <div class="container">
 
@@ -306,101 +306,62 @@ STAFF ONLY
             );
 
 
-        /*
-         * Check Firebase
-         */
+       
+/*
+ * Check Firebase and admin access
+ */
 
-        if (!firebaseReady) {
+const adminContent = document.getElementById('adminContent');
 
-            adminStatus.textContent =
-                'Firebase is not configured.';
+let isAdmin = false;
 
-            throw new Error(
-                'Firebase is not configured.'
-            );
+function denyAccess() {
+    isAdmin = false;
+    window.location.replace('/');
+}
 
+if (!firebaseReady || !auth) {
+    denyAccess();
+} else {
+    FB.onAuthStateChanged(auth, async user => {
+        isAdmin = false;
+        adminContent.style.display = 'none';
+
+        // Not logged in
+        if (!user) {
+            denyAccess();
+            return;
         }
 
+        try {
+            const userRef = FB.doc(db, 'users', user.uid);
+            const userSnapshot = await FB.getDoc(userRef);
 
-        /*
-         * Check login + admin role
-         */
-
-        FB.onAuthStateChanged(
-            auth,
-            async user => {
-
-                if (!user) {
-
-                    adminStatus.textContent =
-                        'You are not logged in.';
-
-                    return;
-
-                }
-
-
-                try {
-
-                    const userRef =
-                        FB.doc(
-                            db,
-                            'users',
-                            user.uid
-                        );
-
-
-                    const userSnapshot =
-                        await FB.getDoc(
-                            userRef
-                        );
-
-
-                    if (!userSnapshot.exists()) {
-
-                        adminStatus.textContent =
-                            'Your users document does not exist.';
-
-                        return;
-
-                    }
-
-
-                    const userData =
-                        userSnapshot.data();
-
-
-                    if (
-                        userData.role !== 'admin'
-                    ) {
-
-                        adminStatus.textContent =
-                            'Your account is not an admin. Set role = admin in Firestore.';
-
-                        return;
-
-                    }
-
-
-                    adminStatus.textContent =
-                        '✓ Admin access confirmed.';
-
-
-                } catch (error) {
-
-                    console.error(
-                        error
-                    );
-
-
-                    adminStatus.textContent =
-                        'Admin check failed: ' +
-                        error.message;
-
-                }
-
+            // No profile or no admin role
+            if (!userSnapshot.exists()) {
+                denyAccess();
+                return;
             }
-        );
+
+            const userData = userSnapshot.data();
+
+            if (userData.role !== 'admin') {
+                denyAccess();
+                return;
+            }
+
+            // Only admins can see the page
+            isAdmin = true;
+            adminContent.style.display = '';
+            adminStatus.textContent = '✓ Admin access confirmed.';
+
+        } catch (error) {
+            console.error('Admin access check failed:', error);
+            denyAccess();
+        }
+    });
+}
+
 
 
         /*
@@ -458,10 +419,10 @@ STAFF ONLY
 
                     try {
 
-                        if (
-                            !auth ||
-                            !auth.currentUser
-                        ) {
+                       if (!isAdmin || !auth || !auth.currentUser) {
+    denyAccess();
+    return;
+}
 
                             alert(
                                 'You are not logged in.'
@@ -670,10 +631,10 @@ STAFF ONLY
 
                     try {
 
-                        if (
-                            !auth ||
-                            !auth.currentUser
-                        ) {
+                      if (!isAdmin || !auth || !auth.currentUser) {
+    denyAccess();
+    return;
+}
 
                             alert(
                                 'You are not logged in.'
