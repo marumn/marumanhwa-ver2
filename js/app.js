@@ -109,6 +109,12 @@ export function footer() {
  * Navigation
  */
 
+const favicon = document.createElement('link');
+favicon.rel = 'icon';
+favicon.type = 'image/png';
+favicon.href = '/assets/logo.png';
+document.head.appendChild(favicon);
+
 export function nav() {
 
     const navElement =
