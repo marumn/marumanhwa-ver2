@@ -62,8 +62,41 @@
 
                 </div>
 
+           
             </section>
 
+            <section
+                id="emailVerificationNotice"
+                class="section"
+                style="display: none;"
+            >
+                <h2>Verify your email to rate and comment</h2>
+
+                <p class="muted">
+                    We will send a verification link to your current
+                    email address. This uses the same verification
+                    flow as the comment section.
+                </p>
+
+                <p id="verificationStatus" class="muted"></p>
+
+                <button
+                    id="sendVerificationButton"
+                    class="btn"
+                    type="button"
+                >
+                    Send verification email
+                </button>
+
+                <button
+                    id="refreshVerificationButton"
+                    class="btn secondary"
+                    type="button"
+                    style="margin-top: 8px;"
+                >
+                    I've verified — refresh status
+                </button>
+            </section>
 
             <section class="section">
 
@@ -114,10 +147,12 @@
             esc
         } from '/js/app.js';
 
+      
         import {
             auth,
             db,
-            FB
+            FB,
+            firebaseReady
         } from '/js/firebase.js';
 
 
@@ -132,6 +167,15 @@
 
         const logoutButton = document.getElementById('logoutButton');
         const adminButton = document.getElementById('adminButton');
+        const verificationNotice =
+            document.getElementById('emailVerificationNotice');
+        const verificationStatus =
+            document.getElementById('verificationStatus');
+        const sendVerificationButton =
+            document.getElementById('sendVerificationButton');
+        const refreshVerificationButton =
+            document.getElementById('refreshVerificationButton');
+
 
         const bookmarks = document.getElementById('bookmarks');
         const history = document.getElementById('history');
@@ -142,6 +186,80 @@
    
 
         footerElement.innerHTML = footer();
+
+        async function refreshVerificationStatus() {
+            const user = auth?.currentUser;
+
+            if (!user) return;
+
+            try {
+                await FB.reload(user);
+
+                if (user.emailVerified) {
+                    verificationNotice.style.display = 'none';
+                    verificationStatus.textContent = '';
+                } else {
+                    verificationNotice.style.display = 'block';
+
+                    verificationStatus.textContent =
+                        'Your email is not verified yet.';
+                }
+            } catch (error) {
+                console.error('Verification refresh failed:', error);
+
+                verificationStatus.textContent =
+                    'Could not refresh your status. Please try again.';
+            }
+        }
+
+        sendVerificationButton.addEventListener('click', async () => {
+            const user = auth?.currentUser;
+
+            if (!user) {
+                window.location.href = '/auth/login';
+                return;
+            }
+
+            try {
+                await FB.reload(user);
+
+                if (user.emailVerified) {
+                    await refreshVerificationStatus();
+
+                    verificationStatus.textContent =
+                        'Your email is already verified!';
+
+                    return;
+                }
+
+                sendVerificationButton.disabled = true;
+
+                await FB.sendEmailVerification(user);
+
+                verificationStatus.textContent =
+                    'Verification email sent to ' + user.email +
+                    '. Check your inbox and spam folder.';
+
+            } catch (error) {
+                console.error('Verification email failed:', error);
+
+                verificationStatus.textContent =
+                    error.code === 'auth/too-many-requests'
+                        ? 'Too many attempts. Please wait before trying again.'
+                        : 'Could not send the email. Please try again.';
+
+            } finally {
+                sendVerificationButton.disabled = false;
+            }
+        });
+
+        refreshVerificationButton.addEventListener('click', async () => {
+            refreshVerificationButton.disabled = true;
+
+            await refreshVerificationStatus();
+
+            refreshVerificationButton.disabled = false;
+        });
 
 
     
@@ -162,7 +280,7 @@
                     return;
                 }
 
-
+                await refreshVerificationStatus();
           
 
                 profileName.textContent =
@@ -219,11 +337,6 @@
                                 userData.username;
                         }
 
-
-                        /*
-                         * Show Admin Panel
-                         * only for admins.
-                         */
 
                         if (userData.role === 'admin') {
 
