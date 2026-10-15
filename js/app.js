@@ -3,11 +3,11 @@ import {
     db,
     firebaseReady,
     FB
-} from './firebase.js';
+} from '/firebase.js';
 
 import {
     demoSeries
-} from './data.js';
+} from '/data.js';
 
 
 /*
@@ -349,6 +349,7 @@ export function nav() {
             }
 
 
+            /
             /*
              * Account button
              */
@@ -359,35 +360,10 @@ export function nav() {
                     class="btn secondary"
                     href="/profile"
                 >
-                    ${esc(username)}
+                    Profile
                 </a>
 
             `;
-
-
-            /*
-             * Admin shortcut
-             */
-
-            if (isAdmin) {
-
-                userNav.innerHTML += `
-
-                    <a
-                        class="btn"
-                        href="/admin/"
-                    >
-                        Admin
-                    </a>
-
-                `;
-
-            }
-
-        }
-    );
-
-}
 
 
 /*
