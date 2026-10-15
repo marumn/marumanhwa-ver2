@@ -349,7 +349,7 @@ export function nav() {
             }
 
 
-            /
+            
             /*
              * Account button
              */
@@ -365,6 +365,10 @@ export function nav() {
 
             `;
 
+        }
+    );
+
+}
 
 /*
  * Get one series
