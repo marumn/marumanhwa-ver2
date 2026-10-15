@@ -130,20 +130,26 @@
         cursor: pointer;
     }
 
-    .auth-switch {
-        margin-top: 26px;
-        padding: 22px 14px;
-        text-align: center;
-        background: #12161e;
-        border: 1px solid #303744;
-        border-radius: 12px;
-    }
 
-    .auth-switch p {
-        margin: 0 0 8px;
-        color: #b6c0d0;
-        font-size: 14px;
-    }
+.auth-switch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+    padding: 16px 12px;
+    text-align: center;
+    background: #12161e;
+    border: 1px solid #303744;
+    border-radius: 12px;
+}
+
+.auth-switch p {
+    margin: 0;
+    color: #b6c0d0;
+    font-size: 14px;
+}
 
     .auth-back {
         display: block;
@@ -370,7 +376,8 @@
             password.autocomplete = 'current-password';
 
             login.style.display = 'block';
-            rememberRow.style.display = 'flex';
+rememberRow.style.display = 'flex';
+forgot.style.display = 'inline';
 
             switchPrompt.textContent = "Don't have an account?";
             document.getElementById('switch').textContent = 'Create account';
