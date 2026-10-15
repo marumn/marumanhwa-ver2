@@ -309,74 +309,129 @@
                 });
         }
 
-        async function loadCommunityData() {
-            if (!firebaseReady) {
-                averageRatingEl.textContent = '—/10';
-                bookmarkCountEl.textContent = '—';
-                ratingMessageEl.textContent =
-                    'Ratings require Firebase to be available.';
-                return;
-            }
+        
+async function loadCommunityData() {
+    if (!firebaseReady) {
+        averageRatingEl.textContent = '—/10';
+        bookmarkCountEl.textContent = '—';
+        ratingMessageEl.textContent =
+            'Firebase is not available.';
+        return;
+    }
 
-            try {
-                const [ratings, bookmarks] = await Promise.all([
-                    FB.getDocs(ratingCollection()),
-                    FB.getDocs(bookmarkCollection())
-                ]);
+    try {
+        // Community ratings for this series.
+        const ratings = await FB.getDocs(
+            ratingCollection()
+        );
 
-                const values = ratings.docs
-                    .map(d => Number(d.data().value))
-                    .filter(n => Number.isInteger(n) && n >= 1 && n <= 10);
+        const values = ratings.docs
+            .map(d => Number(d.data().value))
+            .filter(n =>
+                Number.isInteger(n) && n >= 1 && n <= 10
+            );
 
-                const average = values.length
-                    ? values.reduce((sum, n) => sum + n, 0) / values.length
-                    : 0;
+        const average = values.length
+            ? values.reduce((sum, n) => sum + n, 0) / values.length
+            : 0;
 
-                averageRatingEl.textContent = values.length
-                    ? `${average.toFixed(1)}/10`
-                    : '—/10';
+        averageRatingEl.textContent = values.length
+            ? `${average.toFixed(1)}/10`
+            : '—/10';
 
-                averageRatingEl.title =
-                    `${values.length} rating${values.length === 1 ? '' : 's'}`;
+        averageRatingEl.title =
+            `${values.length} rating${values.length === 1 ? '' : 's'}`;
 
-                bookmarkCountEl.textContent =
-                    String(bookmarks.size);
+        // Existing bookmark system: users/{uid}/bookmarks/{seriesId}
+        // Count bookmarks across all user profiles.
+        const users = await FB.getDocs(
+            FB.collection(db, 'users')
+        );
 
-                const user = auth?.currentUser;
+        let totalBookmarks = 0;
 
-                if (user) {
-                    const ownRating = await FB.getDoc(ratingRef(user.uid));
+        for (const userDoc of users.docs) {
+            const bookmark = await FB.getDoc(
+                FB.doc(
+                    db,
+                    'users',
+                    userDoc.id,
+                    'bookmarks',
+                    id
+                )
+            );
 
-                    if (ownRating.exists()) {
-                        currentRating = Number(
-                            ownRating.data().value
-                        );
-                        paintStars(currentRating);
-                        ratingMessageEl.textContent =
-                            `Your rating: ${currentRating}/10. Tap a star to update it.`;
-                    } else {
-                        ratingMessageEl.textContent =
-                            'Tap a star to submit your rating.';
-                    }
-
-                    const ownBookmark =
-                        await FB.getDoc(bookmarkRef(user.uid));
-
-                    bm.textContent = ownBookmark.exists()
-                        ? '♥ Bookmarked'
-                        : '♡ Bookmark';
-                } else {
-                    ratingMessageEl.textContent =
-                        'Log in and verify your email to rate this manhwa.';
-                }
-            } catch (error) {
-                console.error('Could not load ratings/bookmarks:', error);
-                ratingMessageEl.textContent =
-                    'Could not load community ratings. Please try again later.';
-                averageRatingEl.textContent = '—/10';
-                bookmarkCountEl.textContent = '—';
+            if (bookmark.exists()) {
+                totalBookmarks++;
             }
         }
+
+        bookmarkCountEl.textContent =
+            String(totalBookmarks);
+
+        // Display this user's own rating and bookmark state.
+        const user = auth?.currentUser;
+
+        if (user) {
+            const ownRating = await FB.getDoc(
+                ratingRef(user.uid)
+            );
+
+            if (ownRating.exists()) {
+                currentRating = Number(
+                    ownRating.data().value
+                );
+
+                paintStars(currentRating);
+
+                ratingMessageEl.textContent =
+                    `Your rating: ${currentRating}/10. Tap a star to update it.`;
+            } else {
+                currentRating = 0;
+                paintStars(0);
+
+                ratingMessageEl.textContent =
+                    'Tap a star to submit your rating.';
+            }
+
+            const ownBookmark = await FB.getDoc(
+                FB.doc(
+                    db,
+                    'users',
+                    user.uid,
+                    'bookmarks',
+                    id
+                )
+            );
+
+            bm.textContent = ownBookmark.exists()
+                ? '♥ Bookmarked'
+                : '♡ Bookmark';
+
+        } else {
+            currentRating = 0;
+            paintStars(0);
+
+            bm.textContent = '♡ Bookmark';
+
+            ratingMessageEl.textContent =
+                'Log in and verify your email to rate this manhwa.';
+        }
+
+    } catch (error) {
+        console.error(
+            'Could not load ratings/bookmarks:',
+            error
+        );
+
+        ratingMessageEl.textContent =
+            'Could not load community data. Check Firestore permissions.';
+
+        averageRatingEl.textContent = '—/10';
+        bookmarkCountEl.textContent = '—';
+    }
+}
+
 
         async function verifiedUser() {
             const user = auth?.currentUser;
