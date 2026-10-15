@@ -277,33 +277,10 @@
 
         try {
 
-            const result =
-                await FB.signInWithEmailAndPassword(
-                    auth,
-                    mail,
-                    pass
-                );
+        
+await FB.signInWithEmailAndPassword(auth, mail, pass);
+location.href = '/profile';
 
-
-            await FB.reload(
-                result.user
-            );
-
-
-            if (!result.user.emailVerified) {
-
-                await FB.signOut(auth);
-
-                showMessage(
-                    'Please verify your email before logging in. Check your inbox.'
-                );
-
-                return;
-            }
-
-
-            location.href =
-                '../index.html';
 
 
         } catch (e) {
@@ -451,20 +428,13 @@
             );
 
 
-            await FB.sendEmailVerification(
-                result.user
-            );
+        
+showMessage(
+    'Account created! You can read manhwa now. Verify your email on your profile to rate and comment.'
+);
 
+location.href = '/profile';
 
-            await FB.signOut(auth);
-
-
-            setMode('login');
-
-
-            showMessage(
-                'Account created! We sent a verification email to your email address. Verify it before logging in.'
-            );
 
 
         } catch (e) {
