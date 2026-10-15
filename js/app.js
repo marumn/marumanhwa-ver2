@@ -3,11 +3,11 @@ import {
     db,
     firebaseReady,
     FB
-} from '/firebase.js';
+} from '/js/firebase.js';
 
 import {
     demoSeries
-} from '/data.js';
+} from '/js/data.js';
 
 
 /*
@@ -68,7 +68,7 @@ export function footer() {
                         DMCA
                     </a>
 
-                    <a href="status.html">
+                    <a href="/status">
                         Status
                     </a>
 
