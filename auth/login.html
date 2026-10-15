@@ -5,16 +5,181 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Login — Maru Manhwa</title>
     <link rel="stylesheet" href="/css/style.css">
+    
+<style>
+    body {
+        background: #0b0d12;
+    }
+
+    .authbox-new {
+        box-sizing: border-box;
+        width: calc(100% - 32px);
+        max-width: 480px;
+        margin: 48px auto;
+        padding: 36px;
+        color: #f5f5f7;
+        background: #101319;
+        border: 1px solid #303744;
+        border-radius: 16px;
+        box-shadow: 0 18px 60px #0005;
+    }
+
+    .auth-heading {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .auth-eyebrow {
+        color: #ff4d7d;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 1.8px;
+        margin: 0 0 12px;
+    }
+
+    .auth-heading h1 {
+        color: #fff;
+        font-size: 30px;
+        line-height: 1.2;
+        margin: 0 0 12px;
+    }
+
+    .auth-heading .muted {
+        margin: 0;
+        line-height: 1.6;
+    }
+
+    .authbox-new .field {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 58px;
+        margin: 0 0 16px;
+        padding: 15px 17px;
+        color: #fff;
+        background: #191e27;
+        border: 1px solid #303744;
+        border-radius: 12px;
+        font-size: 15px;
+    }
+
+    .authbox-new .field::placeholder {
+        color: #929eb0;
+    }
+
+    .auth-primary {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 56px;
+        margin-top: 18px;
+        border: 0;
+        border-radius: 12px;
+        background: #ff2e63;
+        color: #fff;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .auth-primary:hover {
+        background: #ff4d7d;
+    }
+
+    .auth-check {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        color: #dce1eb;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+    .auth-check input {
+        width: 18px;
+        height: 18px;
+        margin-top: 2px;
+        flex-shrink: 0;
+        accent-color: #ff2e63;
+    }
+
+    .auth-check a,
+    .authbox-new .linkbtn {
+        color: #ff4d7d;
+        text-decoration: none;
+    }
+
+    .auth-check a {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+    }
+
+    .auth-options {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 4px;
+    }
+
+    .authbox-new .linkbtn {
+        padding: 0;
+        background: none;
+        border: 0;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .auth-switch {
+        margin-top: 26px;
+        padding: 22px 14px;
+        text-align: center;
+        background: #12161e;
+        border: 1px solid #303744;
+        border-radius: 12px;
+    }
+
+    .auth-switch p {
+        margin: 0 0 8px;
+        color: #b6c0d0;
+        font-size: 14px;
+    }
+
+    .auth-back {
+        display: block;
+        margin: 18px auto 0;
+    }
+
+    @media (max-width: 480px) {
+        .authbox-new {
+            margin: 24px auto;
+            padding: 26px 20px;
+        }
+
+        .auth-heading h1 {
+            font-size: 26px;
+        }
+    }
+</style>
+
 </head>
 <body>
     <div id="nav"></div>
 
-<main class="authbox">
-    <h1 id="title">Welcome back</h1>
 
-    <p id="subtitle" class="muted">
-        Sign in to sync bookmarks and reading history.
-    </p>
+<main class="authbox authbox-new">
+
+    <div class="auth-heading">
+        <p id="eyebrow" class="auth-eyebrow">
+            NEW TO MARU MANHWA?
+        </p>
+
+        <h1 id="title">Create an account</h1>
+
+        <p id="subtitle" class="muted">
+            Join Maru Manhwa and start reading.
+        </p>
+    </div>
 
     <div id="msg" class="notice" style="display:none"></div>
 
@@ -24,6 +189,7 @@
             class="field"
             type="text"
             placeholder="Username"
+            autocomplete="username"
         >
     </div>
 
@@ -31,7 +197,8 @@
         id="email"
         class="field"
         type="email"
-        placeholder="Email"
+        placeholder="Email address"
+        autocomplete="email"
     >
 
     <input
@@ -39,59 +206,62 @@
         class="field"
         type="password"
         placeholder="Password"
+        autocomplete="new-password"
     >
 
-    <button
-        id="login"
-        class="btn"
-        style="width:100%;margin-top:8px"
-    >
+    <label id="termsRow" class="auth-check" style="display:none">
+        <input id="agreeTerms" type="checkbox">
+        <span>
+            I agree to the
+            <a href="/terms" target="_blank" rel="noopener">
+                Terms of Service
+            </a>
+            and
+            <a href="/privacy" target="_blank" rel="noopener">
+                Privacy Policy
+            </a>.
+        </span>
+    </label>
+
+    <div id="rememberRow" class="auth-options" style="display:none">
+        <label class="auth-check">
+            <input id="rememberMe" type="checkbox" checked>
+            <span>Remember me</span>
+        </label>
+
+        <button id="forgot" class="linkbtn" type="button">
+            Forgot password?
+        </button>
+    </div>
+
+    <button id="login" class="btn auth-primary" type="button">
         Log in
     </button>
 
-    <button
-        id="signup"
-        class="btn"
-        style="width:100%;margin-top:8px;display:none"
-    >
+    <button id="signup" class="btn auth-primary" type="button">
         Create account
     </button>
 
-    <button
-        id="reset"
-        class="btn"
-        style="width:100%;margin-top:8px;display:none"
-    >
+    <button id="reset" class="btn auth-primary" type="button"
+        style="display:none">
         Send reset email
     </button>
 
-    <button
-        id="forgot"
-        class="linkbtn"
-        style="display:block;margin:12px auto 0"
-    >
-        Forgot password?
-    </button>
-
-    <button
-        id="backToLogin"
-        class="linkbtn"
-        style="display:none;margin:12px auto 0"
-    >
+    <button id="backToLogin" class="linkbtn auth-back"
+        type="button" style="display:none">
         Back to login
     </button>
 
-    <p
-        id="switchText"
-        class="muted"
-        style="text-align:center;margin-top:18px"
-    >
-        Don't have an account?
-        <button id="switch" class="linkbtn">
-            Create one
+    <div id="switchBox" class="auth-switch">
+        <p id="switchPrompt">Already have an account?</p>
+
+        <button id="switch" class="linkbtn" type="button">
+            Log in
         </button>
-    </p>
+    </div>
+
 </main>
+
 
 <div id="footer"></div>
 
@@ -108,6 +278,11 @@
     nav();
 
     const title = document.getElementById('title');
+    const eyebrow = document.getElementById('eyebrow');
+    const termsRow = document.getElementById('termsRow');
+    const agreeTerms = document.getElementById('agreeTerms');
+    const rememberRow = document.getElementById('rememberRow');
+    const switchPrompt = document.getElementById('switchPrompt');
     const subtitle = document.getElementById('subtitle');
     const msg = document.getElementById('msg');
 
@@ -138,10 +313,7 @@
     const backToLogin =
         document.getElementById('backToLogin');
 
-    const switchText =
-        document.getElementById('switchText');
-
-
+    
     function showMessage(text) {
         msg.style.display = 'block';
         msg.textContent = text;
@@ -154,8 +326,8 @@
     }
 
 
+    
     function setMode(mode) {
-
         hideMessage();
 
         usernameBox.style.display = 'none';
@@ -168,87 +340,59 @@
         forgot.style.display = 'none';
         backToLogin.style.display = 'none';
 
-        switchText.style.display = 'block';
+        termsRow.style.display = 'none';
+        rememberRow.style.display = 'none';
 
-
-        if (mode === 'login') {
-
-            title.textContent =
-                'Welcome back';
-
-            subtitle.textContent =
-                'Sign in to sync bookmarks and reading history.';
-
-            password.style.display = 'block';
-
-            login.style.display = 'block';
-            forgot.style.display = 'block';
-
-            switchText.innerHTML = `
-                Don't have an account?
-                <button id="switch" class="linkbtn">
-                    Create one
-                </button>
-            `;
-
-            document
-                .getElementById('switch')
-                .onclick = () => setMode('signup');
-
-        }
-
+        document.getElementById('switchBox').style.display = 'block';
 
         if (mode === 'signup') {
-
-            title.textContent =
-                'Create your account';
-
-            subtitle.textContent =
-                'Create an account to react, comment and sync your library.';
+            eyebrow.textContent = 'NEW TO MARU MANHWA?';
+            title.textContent = 'Create an account';
+            subtitle.textContent = 'Join Maru Manhwa and start reading.';
 
             usernameBox.style.display = 'block';
-            password.style.display = 'block';
+            password.autocomplete = 'new-password';
 
             signup.style.display = 'block';
+            termsRow.style.display = 'flex';
 
-            switchText.innerHTML = `
-                Already have an account?
-                <button id="switch" class="linkbtn">
-                    Log in
-                </button>
-            `;
-
-            document
-                .getElementById('switch')
-                .onclick = () => setMode('login');
-
+            switchPrompt.textContent = 'Already have an account?';
+            document.getElementById('switch').textContent = 'Log in';
+            document.getElementById('switch').onclick =
+                () => setMode('login');
         }
 
+        if (mode === 'login') {
+            eyebrow.textContent = 'WELCOME BACK';
+            title.textContent = 'Welcome back';
+            subtitle.textContent = 'Log in to continue your reading journey.';
+
+            password.autocomplete = 'current-password';
+
+            login.style.display = 'block';
+            rememberRow.style.display = 'flex';
+
+            switchPrompt.textContent = "Don't have an account?";
+            document.getElementById('switch').textContent = 'Create account';
+            document.getElementById('switch').onclick =
+                () => setMode('signup');
+        }
 
         if (mode === 'forgot') {
-
-            title.textContent =
-                'Reset your password';
-
-            subtitle.textContent =
-                'Enter your email to receive a password reset link.';
+            eyebrow.textContent = 'ACCOUNT RECOVERY';
+            title.textContent = 'Reset your password';
+            subtitle.textContent = 'Enter your email to receive a password reset link.';
 
             usernameBox.style.display = 'none';
-
             password.style.display = 'none';
 
-            login.style.display = 'none';
-            signup.style.display = 'none';
-
             reset.style.display = 'block';
-
             backToLogin.style.display = 'block';
 
-            switchText.style.display = 'none';
-
+            document.getElementById('switchBox').style.display = 'none';
         }
-
     }
+
 
 
     login.onclick = async () => {
@@ -321,6 +465,12 @@ location.href = '/profile';
             return;
         }
 
+        if (!agreeTerms.checked) {
+            showMessage(
+                'Please agree to the Terms of Service and Privacy Policy to create an account.'
+            );
+            return;
+        }
 
         if (name.length < 3 || name.length > 20) {
 
@@ -518,7 +668,7 @@ location.href = '/profile';
     };
 
 
-    setMode('login');
+    setMode('signup');
 
 
     document
