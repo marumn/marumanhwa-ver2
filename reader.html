@@ -92,6 +92,30 @@
         const commentListEl = document.getElementById('commentList');
 
         const footerEl = document.getElementById('footer');
+        
+        async function requireVerifiedEmail() {
+            const currentUser = auth?.currentUser;
+
+            if (!currentUser) {
+                location.href = '/auth/login';
+                return false;
+            }
+
+            try {
+                await FB.reload(currentUser);
+            } catch (error) {
+                console.error('Could not refresh user status:', error);
+                alert('Could not check your email verification. Please try again.');
+                return false;
+            }
+
+            if (!auth.currentUser?.emailVerified) {
+                alert('Please verify your email to like, react, comment, or reply. Visit your profile to send a verification email.');
+                return false;
+            }
+
+            return true;
+        }
 
 
         /* --------------------------------
@@ -573,9 +597,9 @@ return {
         `).join('');
 
         reactionsEl.querySelectorAll('[data-chapter-reaction]').forEach(btn => {
+           
             btn.onclick = async () => {
-                if (!auth?.currentUser) {
-                    location.href = '/auth/login';
+                if (!(await requireVerifiedEmail())) {
                     return;
                 }
 
@@ -808,9 +832,9 @@ return {
 
             // Like / dislike any comment or reply
             itemsEl.querySelectorAll('[data-vote]').forEach(btn => {
+               
                 btn.onclick = async () => {
-                    if (!auth?.currentUser) {
-                        location.href = '/auth/login';
+                    if (!(await requireVerifiedEmail())) {
                         return;
                     }
 
@@ -882,11 +906,12 @@ return {
             // Reply to a comment OR another reply
             itemsEl.querySelectorAll('[data-send-reply]').forEach(btn => {
                 btn.onclick = async () => {
-                    const currentUser = auth?.currentUser;
-                    if (!currentUser) {
-                        location.href = '/auth/login';
+                   
+                    if (!(await requireVerifiedEmail())) {
                         return;
                     }
+
+                    const currentUser = auth.currentUser;
 
                     const parentPath = decodeURIComponent(btn.dataset.sendReply);
                     const textarea = document.getElementById(`replyText-${btn.dataset.sendReply}`);
@@ -958,11 +983,12 @@ return {
 
         if (postBtn) {
             postBtn.onclick = async () => {
-                const currentUser = auth?.currentUser;
-                if (!currentUser) {
-                    location.href = '/auth/login';
+               
+                if (!(await requireVerifiedEmail())) {
                     return;
                 }
+
+                const currentUser = auth.currentUser;
 
                 const textarea = document.getElementById('newCommentText');
                 const text = textarea?.value.trim();
