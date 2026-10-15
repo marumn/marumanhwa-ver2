@@ -3,11 +3,11 @@ import {
     db,
     firebaseReady,
     FB
-} from '/js/firebase.js';
+} from './firebase.js';
 
 import {
     demoSeries
-} from '/js/data.js';
+} from './data.js';
 
 
 /*
