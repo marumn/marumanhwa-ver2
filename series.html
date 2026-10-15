@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html>
 <head>
@@ -5,6 +6,81 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Series — Maru Manhwa</title>
     <link rel="stylesheet" href="/css/style.css">
+
+    <style>
+        .series-stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 18px 0;
+        }
+
+        .series-stat {
+            flex: 1;
+            min-width: 100px;
+            padding: 14px;
+            background: #1a1a1a;
+            border: 1px solid #303030;
+            border-radius: 12px;
+        }
+
+        .series-stat-value {
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .series-stat-label {
+            margin-top: 4px;
+            color: #aaa;
+            font-size: 13px;
+        }
+
+        .community-rating {
+            margin: 20px 0;
+            padding: 18px;
+            background: #1a1a1a;
+            border: 1px solid #303030;
+            border-radius: 12px;
+        }
+
+        .rating-stars {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            margin: 12px 0;
+        }
+
+        .rating-star {
+            padding: 2px;
+            border: 0;
+            background: transparent;
+            color: #686868;
+            font-size: clamp(22px, 5vw, 30px);
+            cursor: pointer;
+        }
+
+        .rating-star.active {
+            color: #ffbf47;
+        }
+
+        .rating-star:disabled {
+            cursor: default;
+            opacity: .8;
+        }
+
+        .rating-message {
+            margin-top: 10px;
+            color: #aaa;
+            font-size: 13px;
+        }
+
+        .series-action {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 18px;
+        }
+    </style>
 </head>
 
 <body>
@@ -21,7 +97,6 @@
             footer,
             nav,
             getSeries,
-            saveHistory,
             toggleBookmark,
             esc
         } from '/js/app.js';
@@ -35,25 +110,47 @@
 
         nav();
 
-        let id = new URLSearchParams(location.search).get('id') || 'solo-leveling';
+        const app = document.getElementById('app');
+        const footerEl = document.getElementById('footer');
+
+        const id =
+            new URLSearchParams(location.search).get('id')
+            || 'solo-leveling';
+
+        const ratingCollection = () =>
+            FB.collection(db, 'series', id, 'ratings');
+
+        const bookmarkCollection = () =>
+            FB.collection(db, 'series', id, 'bookmarks');
+
+        const ratingRef = uid =>
+            FB.doc(db, 'series', id, 'ratings', uid);
+
+        const bookmarkRef = uid =>
+            FB.doc(db, 'series', id, 'bookmarks', uid);
 
         let s = await getSeries(id);
         let chapters = [];
 
         if (firebaseReady) {
-            let r = await FB.getDocs(
-                FB.query(
-                    FB.collection(db, 'series', id, 'chapters'),
-                    FB.orderBy('number', 'desc')
-                )
-            );
+            try {
+                const result = await FB.getDocs(
+                    FB.query(
+                        FB.collection(db, 'series', id, 'chapters'),
+                        FB.orderBy('number', 'desc')
+                    )
+                );
 
-            chapters = r.docs.map(d => ({
-                id: d.id,
-                ...d.data()
-            }));
+                chapters = result.docs.map(d => ({
+                    id: d.id,
+                    ...d.data()
+                }));
+            } catch (error) {
+                console.error('Could not load chapters:', error);
+            }
         }
 
+        // Preserve the existing fallback chapter list.
         if (!chapters.length) {
             chapters = Array.from(
                 {
@@ -71,7 +168,10 @@
             <div class="series">
                 <div>
                     <div class="cover">
-                        <img src="${esc(s.cover)}">
+                        <img
+                            src="${esc(s.cover || '')}"
+                            alt="${esc(s.title || 'Manhwa cover')}"
+                        >
                     </div>
                 </div>
 
@@ -80,12 +180,43 @@
                         ${esc(s.status || 'Ongoing')}
                     </div>
 
-                    <h1>${esc(s.title)}</h1>
+                    <h1>${esc(s.title || 'Untitled')}</h1>
 
                     <div class="muted">
-                        ★ ${s.rating || '—'} ·
                         ${esc(s.author || 'Unknown')} ·
                         ${esc(s.artist || 'Unknown')}
+                    </div>
+
+                    <div class="series-stats">
+                        <div class="series-stat">
+                            <div
+                                class="series-stat-value"
+                                id="averageRating"
+                            >—/10</div>
+                            <div class="series-stat-label">
+                                Community rating
+                            </div>
+                        </div>
+
+                        <div class="series-stat">
+                            <div
+                                class="series-stat-value"
+                                id="chapterCount"
+                            >${chapters.length}</div>
+                            <div class="series-stat-label">
+                                Chapters
+                            </div>
+                        </div>
+
+                        <div class="series-stat">
+                            <div
+                                class="series-stat-value"
+                                id="bookmarkCount"
+                            >—</div>
+                            <div class="series-stat-label">
+                                Bookmarks
+                            </div>
+                        </div>
                     </div>
 
                     <p class="muted" style="line-height:1.7">
@@ -98,42 +229,246 @@
                         `).join('')}
                     </div>
 
-                    <button id="bm" class="btn">
-                        ♡ Bookmark
-                    </button>
+                    <div class="series-action">
+                        <button id="bm" class="btn">
+                            ♡ Bookmark
+                        </button>
+                    </div>
+
+                    <section class="community-rating">
+                        <h3 style="margin:0">Rate this manhwa</h3>
+
+                        <p class="muted">
+                            Choose a score from 1 to 10 stars.
+                        </p>
+
+                        <div
+                            id="ratingStars"
+                            class="rating-stars"
+                            aria-label="Rate this manhwa from 1 to 10"
+                        >
+                            ${Array.from({length: 10}, (_, i) => `
+                                <button
+                                    type="button"
+                                    class="rating-star"
+                                    data-rating="${i + 1}"
+                                    aria-label="${i + 1} out of 10 stars"
+                                    title="${i + 1}/10"
+                                >★</button>
+                            `).join('')}
+                        </div>
+
+                        <div id="ratingMessage" class="rating-message">
+                            Loading rating…
+                        </div>
+                    </section>
                 </div>
             </div>
+
+            <h2>Chapters</h2>
 
             <div class="chapterlist">
                 ${chapters.map(c => `
                     <a
                         class="chapter"
-                        href="reader?series=${encodeURIComponent(id)}&chapter=${encodeURIComponent(c.id)}"
+                        href="/reader?series=${encodeURIComponent(id)}&chapter=${encodeURIComponent(c.id)}"
                     >
                         <span>
-                            Chapter ${c.number}${c.title ? ' — ' + esc(c.title) : ''}
+                            Chapter ${esc(String(c.number ?? c.id))}
+                            ${c.title ? ' — ' + esc(c.title) : ''}
                         </span>
 
-                        <span class="muted">
-                            Read →
-                        </span>
+                        <span class="muted">Read →</span>
                     </a>
                 `).join('')}
             </div>
         `;
 
-        bm.onclick = async () => {
-            if (!auth) {
-                alert('Please log in first.');
+        const bm = document.getElementById('bm');
+        const averageRatingEl =
+            document.getElementById('averageRating');
+        const bookmarkCountEl =
+            document.getElementById('bookmarkCount');
+        const ratingStarsEl =
+            document.getElementById('ratingStars');
+        const ratingMessageEl =
+            document.getElementById('ratingMessage');
+
+        let currentRating = 0;
+        let ratingBusy = false;
+
+        function paintStars(value) {
+            ratingStarsEl.querySelectorAll('.rating-star')
+                .forEach(button => {
+                    const n = Number(button.dataset.rating);
+                    button.classList.toggle('active', n <= value);
+                    button.setAttribute(
+                        'aria-pressed',
+                        String(n === value)
+                    );
+                });
+        }
+
+        async function loadCommunityData() {
+            if (!firebaseReady) {
+                averageRatingEl.textContent = '—/10';
+                bookmarkCountEl.textContent = '—';
+                ratingMessageEl.textContent =
+                    'Ratings require Firebase to be available.';
                 return;
             }
 
-            let x = await toggleBookmark(s);
+            try {
+                const [ratings, bookmarks] = await Promise.all([
+                    FB.getDocs(ratingCollection()),
+                    FB.getDocs(bookmarkCollection())
+                ]);
 
-            bm.textContent = x
-                ? '♥ Bookmarked'
-                : '♡ Bookmark';
+                const values = ratings.docs
+                    .map(d => Number(d.data().value))
+                    .filter(n => Number.isInteger(n) && n >= 1 && n <= 10);
+
+                const average = values.length
+                    ? values.reduce((sum, n) => sum + n, 0) / values.length
+                    : 0;
+
+                averageRatingEl.textContent = values.length
+                    ? `${average.toFixed(1)}/10`
+                    : '—/10';
+
+                averageRatingEl.title =
+                    `${values.length} rating${values.length === 1 ? '' : 's'}`;
+
+                bookmarkCountEl.textContent =
+                    String(bookmarks.size);
+
+                const user = auth?.currentUser;
+
+                if (user) {
+                    const ownRating = await FB.getDoc(ratingRef(user.uid));
+
+                    if (ownRating.exists()) {
+                        currentRating = Number(
+                            ownRating.data().value
+                        );
+                        paintStars(currentRating);
+                        ratingMessageEl.textContent =
+                            `Your rating: ${currentRating}/10. Tap a star to update it.`;
+                    } else {
+                        ratingMessageEl.textContent =
+                            'Tap a star to submit your rating.';
+                    }
+
+                    const ownBookmark =
+                        await FB.getDoc(bookmarkRef(user.uid));
+
+                    bm.textContent = ownBookmark.exists()
+                        ? '♥ Bookmarked'
+                        : '♡ Bookmark';
+                } else {
+                    ratingMessageEl.textContent =
+                        'Log in and verify your email to rate this manhwa.';
+                }
+            } catch (error) {
+                console.error('Could not load ratings/bookmarks:', error);
+                ratingMessageEl.textContent =
+                    'Could not load community ratings. Please try again later.';
+                averageRatingEl.textContent = '—/10';
+                bookmarkCountEl.textContent = '—';
+            }
+        }
+
+        async function verifiedUser() {
+            const user = auth?.currentUser;
+
+            if (!user) {
+                alert('Please log in first.');
+                location.href = '/auth/login';
+                return null;
+            }
+
+            try {
+                await FB.reload(user);
+            } catch (error) {
+                console.error(error);
+                alert('Could not check your email verification. Try again.');
+                return null;
+            }
+
+            if (!auth.currentUser?.emailVerified) {
+                alert(
+                    'Please verify your email before rating or bookmarking. You can send a verification email from your profile.'
+                );
+                return null;
+            }
+
+            return auth.currentUser;
+        }
+
+        ratingStarsEl.addEventListener('click', async event => {
+            const button = event.target.closest('[data-rating]');
+
+            if (!button || ratingBusy) return;
+
+            const value = Number(button.dataset.rating);
+
+            if (!Number.isInteger(value) || value < 1 || value > 10) {
+                return;
+            }
+
+            const user = await verifiedUser();
+            if (!user) return;
+
+            ratingBusy = true;
+            ratingMessageEl.textContent = 'Saving your rating…';
+
+            try {
+                await FB.setDoc(ratingRef(user.uid), {
+                    uid: user.uid,
+                    value,
+                    updatedAt: FB.serverTimestamp()
+                });
+
+                currentRating = value;
+                paintStars(value);
+                ratingMessageEl.textContent =
+                    `Your rating: ${value}/10. You can change it anytime.`;
+
+                await loadCommunityData();
+            } catch (error) {
+                console.error('Could not save rating:', error);
+                ratingMessageEl.textContent =
+                    'Could not save your rating. Please try again.';
+            } finally {
+                ratingBusy = false;
+            }
+        });
+
+        bm.onclick = async () => {
+            const user = await verifiedUser();
+            if (!user) return;
+
+            bm.disabled = true;
+
+            try {
+                // Use the existing helper to preserve your current
+                // bookmark behavior and data format.
+                const result = await toggleBookmark(s);
+
+                bm.textContent = result
+                    ? '♥ Bookmarked'
+                    : '♡ Bookmark';
+
+                await loadCommunityData();
+            } catch (error) {
+                console.error('Could not update bookmark:', error);
+                alert('Could not update your bookmark. Please try again.');
+            } finally {
+                bm.disabled = false;
+            }
         };
+
+        await loadCommunityData();
 
         footerEl.innerHTML = footer();
     </script>
